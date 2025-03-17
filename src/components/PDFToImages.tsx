@@ -33,6 +33,12 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import PageHeader from './PageHeader';
 
+// Import pdf.js library
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set the worker source
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
 interface ImagePreview {
   url: string;
   pageNumber: number;
@@ -100,73 +106,62 @@ const PDFToImages: React.FC = () => {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
-      const totalPages = pdfDoc.getPageCount();
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
+      const totalPages = pdf.numPages;
       const newImages: ImagePreview[] = [];
 
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
         try {
-          // Create a new document for each page
-          const singlePageDoc = await PDFDocument.create();
-          const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageNumber - 1]);
-          singlePageDoc.addPage(copiedPage);
-
-          // Convert page to PNG using canvas
-          const pdfBytes = await singlePageDoc.save();
-          const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-          const url = URL.createObjectURL(blob);
-
-          // Create an image from the PDF page
-          const img = new Image();
+          // Get the page
+          const page = await pdf.getPage(pageNumber);
+          
+          // Set scale for better quality
+          const scale = 2.0;
+          const viewport = page.getViewport({ scale });
+          
+          // Create a canvas
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-
+          
           if (!ctx) {
             throw new Error('Failed to get canvas context');
           }
-
-          // Convert PDF page to image
-          await new Promise<void>((resolve, reject) => {
-            img.onload = async () => {
-              try {
-                const scale = 2; // Higher scale for better quality
-                canvas.width = img.width * scale;
-                canvas.height = img.height * scale;
-                ctx.scale(scale, scale);
-                ctx.drawImage(img, 0, 0);
-                
-                // Convert to PNG with specified quality
-                const imageBlob = await new Promise<Blob>((resolve, reject) => {
-                  canvas.toBlob(
-                    (blob) => {
-                      if (blob) {
-                        resolve(blob);
-                      } else {
-                        reject(new Error('Failed to create image blob'));
-                      }
-                    },
-                    'image/png',
-                    quality / 100
-                  );
-                });
-
-                newImages.push({
-                  url: URL.createObjectURL(imageBlob),
-                  pageNumber,
-                  blob: imageBlob
-                });
-
-                // Cleanup
-                URL.revokeObjectURL(url);
-                resolve();
-              } catch (error) {
-                reject(error);
-              }
-            };
-            img.onerror = () => reject(new Error('Failed to load PDF page'));
-            img.src = url;
+          
+          // Set canvas dimensions
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          
+          // Render the PDF page to the canvas
+          const renderContext = {
+            canvasContext: ctx,
+            viewport: viewport
+          };
+          
+          await page.render(renderContext).promise;
+          
+          // Convert canvas to image blob with specified quality
+          const imageBlob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob(
+              (blob) => {
+                if (blob) {
+                  resolve(blob);
+                } else {
+                  reject(new Error('Failed to create image blob'));
+                }
+              },
+              'image/png',
+              quality / 100
+            );
           });
-
+          
+          // Add to images array
+          newImages.push({
+            url: URL.createObjectURL(imageBlob),
+            pageNumber,
+            blob: imageBlob
+          });
+          
           setProgress((pageNumber / totalPages) * 100);
         } catch (pageError) {
           console.error(`Error processing page ${pageNumber}:`, pageError);
