@@ -39,44 +39,39 @@ const OUTPUT_FOLDER = '/output';
 
 // Map permission flags to qpdf command arguments
 const mapPermissionsToArgs = (permissionFlags: any, userPassword: string, ownerPassword: string) => {
-  // Base arguments for encryption
+  // Basic arguments for encryption
   const args = [
     INPUT_FILE,
     '--encrypt',
     userPassword,
     ownerPassword,
     '256', // Use 256-bit encryption
-    '--'
   ];
 
-  // Add permissions
+  // Add permission flags
+  // For printing options
   if (!permissionFlags.printing) {
     args.push('--print=none');
+  } else {
+    args.push('--print=full');
   }
   
+  // For modification options
   if (!permissionFlags.modifying) {
     args.push('--modify=none');
+  } else {
+    args.push('--modify=all');
   }
   
-  if (!permissionFlags.copying) {
-    args.push('--extract=n');
-  }
+  // For other specific permissions
+  args.push(`--extract=${permissionFlags.copying ? 'y' : 'n'}`);
+  args.push(`--annotate=${permissionFlags.annotating ? 'y' : 'n'}`);
+  args.push(`--form=${permissionFlags.fillingForms ? 'y' : 'n'}`);
+  args.push(`--accessibility=${permissionFlags.contentAccessibility ? 'y' : 'n'}`);
+  args.push(`--assemble=${permissionFlags.documentAssembly ? 'y' : 'n'}`);
   
-  if (!permissionFlags.annotating) {
-    args.push('--annotate=n');
-  }
-  
-  if (!permissionFlags.fillingForms) {
-    args.push('--form=n');
-  }
-  
-  if (!permissionFlags.contentAccessibility) {
-    args.push('--accessibility=n');
-  }
-  
-  if (!permissionFlags.documentAssembly) {
-    args.push('--assemble=n');
-  }
+  // End of encryption options
+  args.push('--');
   
   // Output file path
   args.push(OUTPUT_FILE);
