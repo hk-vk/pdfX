@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { 
   Box, 
@@ -33,6 +33,13 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import PageHeader from './PageHeader';
 
+// Define PDF.js types
+declare global {
+  interface Window {
+    pdfjsLib: any;
+  }
+}
+
 interface ImagePreview {
   url: string;
   pageNumber: number;
@@ -46,7 +53,44 @@ const PDFToImages: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [pdfJsLoaded, setPdfJsLoaded] = useState(false);
   const theme = useTheme();
+  const pdfJsScriptRef = useRef<HTMLScriptElement | null>(null);
+  const pdfJsWorkerScriptRef = useRef<HTMLScriptElement | null>(null);
+
+  // Load PDF.js from CDN
+  useEffect(() => {
+    if (!pdfJsScriptRef.current) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+      script.async = true;
+      script.onload = () => {
+        // Load worker after main library is loaded
+        const workerScript = document.createElement('script');
+        workerScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        workerScript.async = true;
+        workerScript.onload = () => {
+          // Set worker source
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+          setPdfJsLoaded(true);
+        };
+        document.body.appendChild(workerScript);
+        pdfJsWorkerScriptRef.current = workerScript;
+      };
+      document.body.appendChild(script);
+      pdfJsScriptRef.current = script;
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (pdfJsScriptRef.current) {
+        document.body.removeChild(pdfJsScriptRef.current);
+      }
+      if (pdfJsWorkerScriptRef.current) {
+        document.body.removeChild(pdfJsWorkerScriptRef.current);
+      }
+    };
+  }, []);
 
   // Cleanup function to revoke object URLs
   const cleanupImages = useCallback(() => {
@@ -90,98 +134,56 @@ const PDFToImages: React.FC = () => {
     setQuality(newValue as number);
   };
 
-  // Function to convert PDF to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-    });
-  };
+  const renderPDFPageToCanvas = async (arrayBuffer: ArrayBuffer, pageNumber: number, scale: number = 2.0): Promise<HTMLCanvasElement> => {
+    if (!window.pdfjsLib) {
+      throw new Error('PDF.js library not loaded');
+    }
 
-  // Function to render PDF page to canvas using an iframe technique
-  const renderPDFPageToCanvas = (pdfUrl: string, pageNumber: number, scale: number = 2.0): Promise<HTMLCanvasElement> => {
-    return new Promise((resolve, reject) => {
-      try {
-        // Create a temporary iframe to load the PDF
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-        
-        // Set up iframe load handler
-        iframe.onload = async () => {
-          try {
-            // Wait a bit for the PDF to render in the iframe
-            setTimeout(async () => {
-              try {
-                if (!iframe.contentWindow) {
-                  throw new Error('Cannot access iframe content window');
-                }
-                
-                // Get the rendered PDF page
-                const iframeDocument = iframe.contentWindow.document;
-                const pdfElement = iframeDocument.querySelector('embed') || iframeDocument.querySelector('object');
-                
-                if (!pdfElement) {
-                  throw new Error('PDF element not found in iframe');
-                }
-                
-                // Create a canvas to capture the rendered PDF
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                if (!ctx) {
-                  throw new Error('Failed to get canvas context');
-                }
-                
-                // Set canvas dimensions based on the PDF element size
-                const width = pdfElement.clientWidth * scale;
-                const height = pdfElement.clientHeight * scale;
-                
-                canvas.width = width;
-                canvas.height = height;
-                
-                // We can't directly draw the PDF element to canvas due to type constraints
-                // Instead, we'll create a placeholder
-                ctx.fillStyle = 'white';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#6c5dac';
-                ctx.font = `${24}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.fillText(`PDF Page ${pageNumber}`, canvas.width / 2, 50);
-                
-                // Clean up
-                document.body.removeChild(iframe);
-                
-                resolve(canvas);
-              } catch (error) {
-                document.body.removeChild(iframe);
-                reject(error);
-              }
-            }, 1000); // Give it a second to render
-          } catch (error) {
-            document.body.removeChild(iframe);
-            reject(error);
-          }
-        };
-        
-        // Handle iframe load errors
-        iframe.onerror = (error) => {
-          document.body.removeChild(iframe);
-          reject(error);
-        };
-        
-        // Set iframe source to the PDF URL with page parameter
-        iframe.src = `${pdfUrl}#page=${pageNumber}`;
-      } catch (error) {
-        reject(error);
+    try {
+      // Load the PDF document
+      const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
+
+      // Get the page
+      const page = await pdf.getPage(pageNumber);
+      
+      // Set scale for better quality
+      const viewport = page.getViewport({ scale });
+      
+      // Create a canvas
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
       }
-    });
+      
+      // Set canvas dimensions
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      
+      // Render the PDF page to the canvas
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: viewport
+      };
+      
+      await page.render(renderContext).promise;
+      
+      return canvas;
+    } catch (error) {
+      console.error('Error rendering PDF page:', error);
+      throw error;
+    }
   };
 
   const convertToImages = async () => {
-    if (!file) return;
+    if (!file || !pdfJsLoaded) {
+      if (!pdfJsLoaded) {
+        setError('PDF.js library is still loading. Please try again in a moment.');
+      }
+      return;
+    }
     
     setProcessing(true);
     setProgress(0);
@@ -195,59 +197,10 @@ const PDFToImages: React.FC = () => {
       const totalPages = pdfDoc.getPageCount();
       const newImages: ImagePreview[] = [];
 
-      // Convert file to base64 for embedding
-      const pdfBase64 = await fileToBase64(file);
-
-      // Alternative approach using pdf-lib to extract each page
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
         try {
-          // Create a new document with just this page
-          const singlePageDoc = await PDFDocument.create();
-          const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageNumber - 1]);
-          singlePageDoc.addPage(copiedPage);
-          
-          // Save the single page PDF
-          const pdfBytes = await singlePageDoc.save();
-          const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-          const pdfUrl = URL.createObjectURL(pdfBlob);
-          
-          // Create a canvas to render the PDF
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          
-          if (!ctx) {
-            throw new Error('Failed to get canvas context');
-          }
-          
-          // Set standard dimensions for PDF pages
-          const scale = 2.0; // Higher scale for better quality
-          canvas.width = 800 * scale;
-          canvas.height = 1100 * scale;
-          
-          // Create a placeholder image with page number
-          ctx.fillStyle = 'white';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          
-          // Add a border
-          ctx.strokeStyle = '#e0e0e0';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-          
-          // Add page information
-          ctx.fillStyle = '#6c5dac';
-          ctx.font = `${36 * scale / 2}px Arial`;
-          ctx.textAlign = 'center';
-          ctx.fillText(`PDF Page ${pageNumber}`, canvas.width / 2, 100 * scale / 2);
-          
-          // Add file name
-          ctx.font = `${24 * scale / 2}px Arial`;
-          ctx.fillText(file.name, canvas.width / 2, 150 * scale / 2);
-          
-          // Add PDF icon or decoration
-          ctx.beginPath();
-          ctx.arc(canvas.width / 2, canvas.height / 2, 100 * scale / 2, 0, 2 * Math.PI);
-          ctx.fillStyle = 'rgba(108, 93, 172, 0.1)';
-          ctx.fill();
+          // Render the PDF page to a canvas
+          const canvas = await renderPDFPageToCanvas(arrayBuffer, pageNumber, 2.0);
           
           // Convert canvas to image blob with specified quality
           const imageBlob = await new Promise<Blob>((resolve, reject) => {
@@ -270,9 +223,6 @@ const PDFToImages: React.FC = () => {
             pageNumber,
             blob: imageBlob
           });
-          
-          // Clean up
-          URL.revokeObjectURL(pdfUrl);
           
           setProgress((pageNumber / totalPages) * 100);
         } catch (pageError) {
@@ -424,7 +374,7 @@ const PDFToImages: React.FC = () => {
                     <Button
                       variant="contained"
                       onClick={convertToImages}
-                      disabled={processing}
+                      disabled={processing || !pdfJsLoaded}
                       startIcon={<ImageIcon />}
                       sx={{
                         background: theme => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
@@ -434,7 +384,7 @@ const PDFToImages: React.FC = () => {
                         }
                       }}
                     >
-                      {processing ? 'Converting...' : 'Convert to Images'}
+                      {!pdfJsLoaded ? 'Loading PDF.js...' : processing ? 'Converting...' : 'Convert to Images'}
                     </Button>
                   </Stack>
                 </Stack>
