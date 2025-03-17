@@ -1,80 +1,74 @@
-import { useState } from 'react'
+import React, { useState, useMemo } from 'react';
 import { 
   Box, 
   Container, 
-  Tab, 
-  Tabs, 
-  Typography, 
-  Paper, 
+  CssBaseline, 
   ThemeProvider, 
-  createTheme,
-  CssBaseline,
+  createTheme, 
   useMediaQuery,
-  alpha,
-} from '@mui/material'
-import { motion } from 'framer-motion'
-import PDFMerger from './components/PDFMerger'
-import PDFSplitter from './components/PDFSplitter'
-import PDFCompressor from './components/PDFCompressor'
-import PDFToImages from './components/PDFToImages'
-import Logo from './components/Logo'
-import ThemeToggle from './components/ThemeToggle'
-import GlassmorphicContainer from './components/GlassmorphicContainer'
+  Typography,
+  IconButton,
+  Tabs,
+  Tab,
+  AppBar,
+  Toolbar,
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  useTheme,
+} from '@mui/material';
+import { 
+  Brightness4 as DarkModeIcon, 
+  Brightness7 as LightModeIcon,
+  Menu as MenuIcon,
+  MergeType as MergeIcon,
+  ContentCut as SplitIcon,
+  Compress as CompressIcon,
+  Image as ImageIcon,
+  Home as HomeIcon,
+} from '@mui/icons-material';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import PDFMerger from "./components/PDFMerger";
+import PDFSplitter from "./components/PDFSplitter";
+import PDFCompressor from "./components/PDFCompressor";
+import PDFToImages from "./components/PDFToImages";
+import Logo from "./components/Logo";
+import ThemeToggle from "./components/ThemeToggle";
+import GlassmorphicContainer from "./components/GlassmorphicContainer";
+import WelcomeScreen from "./components/WelcomeScreen";
 
-// Create motion components
 const MotionBox = motion(Box);
-const MotionPaper = motion(Paper);
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
 
 function App() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
-  const [isDarkMode, setIsDarkMode] = useState(prefersDarkMode);
-  const [currentTab, setCurrentTab] = useState(0);
+  const [mode, setMode] = useState<'light' | 'dark'>(prefersDarkMode ? 'dark' : 'light');
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setCurrentTab(newValue);
+  const toggleDrawer = () => {
+    setDrawerOpen(!drawerOpen);
   };
-  
+
   const toggleColorMode = () => {
-    setIsDarkMode(!isDarkMode);
+    setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
   };
-  
-  // Define light and dark mode colors
+
+  // Define color palettes
   const lightPalette = {
     primary: {
       main: '#4361ee',
       light: '#738eef',
-      dark: '#3a4fd0',
+      dark: '#3a0ca3',
+      contrastText: '#ffffff',
     },
     secondary: {
-      main: '#3a0ca3',
-      light: '#5a3dba',
-      dark: '#2a0979',
+      main: '#7209b7',
+      light: '#9d4eca',
+      dark: '#560a86',
+      contrastText: '#ffffff',
     },
     background: {
       default: '#f8fafc',
@@ -91,30 +85,32 @@ function App() {
       main: '#f59e0b',
     },
     info: {
-      main: '#0ea5e9',
+      main: '#3b82f6',
     },
     success: {
       main: '#10b981',
     },
   };
-  
+
   const darkPalette = {
     primary: {
-      main: '#60a5fa',
-      light: '#93c5fd',
-      dark: '#3b82f6',
+      main: '#4361ee',
+      light: '#738eef',
+      dark: '#3a0ca3',
+      contrastText: '#ffffff',
     },
     secondary: {
-      main: '#818cf8',
-      light: '#a5b4fc',
-      dark: '#6366f1',
+      main: '#9d4eca',
+      light: '#c77fde',
+      dark: '#7209b7',
+      contrastText: '#ffffff',
     },
     background: {
       default: '#0f172a',
       paper: '#1e293b',
     },
     text: {
-      primary: '#e2e8f0',
+      primary: '#f1f5f9',
       secondary: '#94a3b8',
     },
     error: {
@@ -124,229 +120,284 @@ function App() {
       main: '#fbbf24',
     },
     info: {
-      main: '#38bdf8',
+      main: '#60a5fa',
     },
     success: {
       main: '#34d399',
     },
   };
-  
-  // Create theme based on color mode
-  const theme = createTheme({
-    palette: {
-      mode: isDarkMode ? 'dark' : 'light',
-      ...(isDarkMode ? darkPalette : lightPalette),
-    },
-    typography: {
-      fontFamily: '"Plus Jakarta Sans", "Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-      h1: {
-        fontWeight: 700,
-      },
-      h2: {
-        fontWeight: 700,
-      },
-      h3: {
-        fontWeight: 600,
-      },
-      h4: {
-        fontWeight: 600,
-      },
-      h5: {
-        fontWeight: 600,
-      },
-      h6: {
-        fontWeight: 600,
-      },
-    },
-    shape: {
-      borderRadius: 12,
-    },
-    components: {
-      MuiButton: {
-        styleOverrides: {
-          root: {
-            textTransform: 'none',
-            borderRadius: 10,
-            fontWeight: 600,
-            boxShadow: 'none',
-            '&:hover': {
-              boxShadow: 'none',
-            },
-          },
+
+  // Create theme
+  const theme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode,
+          ...(mode === 'light' ? lightPalette : darkPalette),
         },
-      },
-      MuiPaper: {
-        styleOverrides: {
-          root: {
-            backgroundImage: 'none',
+        typography: {
+          fontFamily: '"Geist Sans", "Plus Jakarta Sans", "Inter", sans-serif',
+          h1: {
+            fontWeight: 800,
           },
-        },
-      },
-      MuiTab: {
-        styleOverrides: {
-          root: {
-            textTransform: 'none',
+          h2: {
+            fontWeight: 700,
+          },
+          h3: {
+            fontWeight: 700,
+          },
+          h4: {
             fontWeight: 600,
           },
+          h5: {
+            fontWeight: 600,
+          },
+          h6: {
+            fontWeight: 600,
+          },
+          button: {
+            fontWeight: 600,
+            textTransform: 'none',
+          },
         },
-      },
-      MuiCssBaseline: {
-        styleOverrides: {
-          body: {
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#6b7280 transparent',
-            '&::-webkit-scrollbar': {
-              width: '8px',
-              height: '8px',
+        shape: {
+          borderRadius: 12,
+        },
+        components: {
+          MuiButton: {
+            styleOverrides: {
+              root: {
+                borderRadius: 8,
+                boxShadow: 'none',
+                textTransform: 'none',
+                fontWeight: 600,
+                padding: '8px 16px',
+              },
+              contained: {
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                '&:hover': {
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                },
+              },
             },
-            '&::-webkit-scrollbar-track': {
-              background: 'transparent',
+          },
+          MuiPaper: {
+            styleOverrides: {
+              root: {
+                backgroundImage: 'none',
+              },
+              rounded: {
+                borderRadius: 12,
+              },
             },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: '#6b7280',
-              borderRadius: '20px',
-              border: '2px solid transparent',
-              backgroundClip: 'content-box',
+          },
+          MuiTab: {
+            styleOverrides: {
+              root: {
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '0.875rem',
+              },
             },
-            '&::-webkit-scrollbar-thumb:hover': {
-              backgroundColor: '#4b5563',
+          },
+          MuiAppBar: {
+            styleOverrides: {
+              root: {
+                boxShadow: mode === 'light' 
+                  ? '0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1)' 
+                  : '0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3)',
+                backgroundImage: 'none',
+              },
+            },
+          },
+          MuiDrawer: {
+            styleOverrides: {
+              paper: {
+                backgroundImage: 'none',
+              },
             },
           },
         },
-      },
-    },
-  });
+      }),
+    [mode]
+  );
+
+  const menuItems = [
+    { text: 'Home', icon: <HomeIcon />, path: '/' },
+    { text: 'Merge PDFs', icon: <MergeIcon />, path: '/merge' },
+    { text: 'Split PDF', icon: <SplitIcon />, path: '/split' },
+    { text: 'Compress PDF', icon: <CompressIcon />, path: '/compress' },
+    { text: 'PDF to Images', icon: <ImageIcon />, path: '/to-images' },
+  ];
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ position: 'absolute', top: 20, right: 24 }}>
-          <ThemeToggle isDarkMode={isDarkMode} toggleColorMode={toggleColorMode} variant="fancy" />
-        </Box>
-        
-        <MotionBox 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center',
-            mb: 5
-          }}
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
-        >
-          <Box sx={{ mb: 3 }}>
-            <Logo size="large" />
-          </Box>
-          <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', maxWidth: 600 }}>
-            Your all-in-one PDF toolkit for merging, splitting, compressing, and converting PDF files - completely offline and secure.
-          </Typography>
-        </MotionBox>
-
-        <GlassmorphicContainer
-          sx={{ 
-            overflow: 'hidden',
-            borderRadius: 4,
-            mb: 4,
-            position: 'relative',
-          }}
-          blurStrength={16}
-          backgroundOpacity={isDarkMode ? 0.2 : 0.1}
-          borderOpacity={isDarkMode ? 0.2 : 0.1}
-          motionProps={{
-            initial: { opacity: 0, y: 40 },
-            animate: { opacity: 1, y: 0 },
-            transition: { 
-              type: "spring",
-              stiffness: 100,
-              damping: 20,
-              delay: 0.3
-            }
-          }}
-        >
-          <Box sx={{ 
-            borderBottom: 1, 
-            borderColor: 'divider',
-            bgcolor: theme => alpha(theme.palette.background.paper, isDarkMode ? 0.6 : 0.8),
-            backdropFilter: 'blur(16px)',
-          }}>
-            <Tabs 
-              value={currentTab} 
-              onChange={handleTabChange}
-              variant="fullWidth"
-              aria-label="PDF tools"
-              sx={{
-                '& .MuiTabs-indicator': {
-                  height: 3,
-                  borderRadius: '3px 3px 0 0',
-                  background: isDarkMode 
-                    ? 'linear-gradient(90deg, #60a5fa, #3b82f6)' 
-                    : 'linear-gradient(90deg, #4361ee, #3a0ca3)',
-                },
-                '& .MuiTab-root': {
-                  transition: 'all 0.3s',
-                  '&.Mui-selected': {
-                    color: isDarkMode ? '#60a5fa' : '#4361ee',
+      <Router>
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <AppBar 
+            position="sticky" 
+            color="default" 
+            elevation={0}
+            sx={{ 
+              backdropFilter: 'blur(10px)',
+              backgroundColor: theme => theme.palette.mode === 'light' 
+                ? 'rgba(255, 255, 255, 0.8)' 
+                : 'rgba(30, 41, 59, 0.8)',
+              borderBottom: theme => `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <Toolbar>
+              <IconButton
+                edge="start"
+                color="inherit"
+                aria-label="menu"
+                onClick={toggleDrawer}
+                sx={{ mr: 2, display: { sm: 'none' } }}
+              >
+                <MenuIcon />
+              </IconButton>
+              
+              <Box 
+                component={Link} 
+                to="/" 
+                sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                }}
+              >
+                <Logo height={40} width={40} />
+                <Typography 
+                  variant="h6" 
+                  component="div" 
+                  sx={{ 
+                    ml: 1.5, 
                     fontWeight: 700,
-                    transform: 'translateY(-2px)',
-                  },
-                  '&:hover': {
-                    color: isDarkMode ? '#93c5fd' : '#738eef',
-                    opacity: 0.9,
-                  }
-                },
-              }}
-            >
-              <Tab 
-                label="Merge PDFs" 
-                sx={{ py: 2 }}
-              />
-              <Tab 
-                label="Split PDF" 
-                sx={{ py: 2 }}
-              />
-              <Tab 
-                label="Compress PDF" 
-                sx={{ py: 2 }}
-              />
-              <Tab 
-                label="PDF to Images" 
-                sx={{ py: 2 }}
-              />
-            </Tabs>
+                    display: { xs: 'none', sm: 'block' },
+                    fontFamily: '"Geist Sans", sans-serif',
+                  }}
+                >
+                  pdfX
+                </Typography>
+              </Box>
+              
+              <Box sx={{ display: { xs: 'none', sm: 'block' }, ml: 4, flexGrow: 1 }}>
+                <Tabs 
+                  value={false} 
+                  aria-label="navigation tabs"
+                  sx={{
+                    '& .MuiTab-root': {
+                      minWidth: 'auto',
+                      px: 2,
+                      fontFamily: '"Geist Sans", sans-serif',
+                    },
+                  }}
+                >
+                  {menuItems.map((item) => (
+                    <Tab
+                      key={item.path}
+                      label={item.text}
+                      component={Link}
+                      to={item.path}
+                      icon={item.icon}
+                      iconPosition="start"
+                    />
+                  ))}
+                </Tabs>
+              </Box>
+              
+              <Box sx={{ ml: 'auto' }}>
+                <ThemeToggle 
+                  isDarkMode={mode === 'dark'} 
+                  toggleColorMode={toggleColorMode}
+                  variant="fancy"
+                />
+              </Box>
+            </Toolbar>
+          </AppBar>
+          
+          <Drawer
+            anchor="left"
+            open={drawerOpen}
+            onClose={toggleDrawer}
+            sx={{
+              '& .MuiDrawer-paper': {
+                width: 280,
+                boxSizing: 'border-box',
+              },
+            }}
+          >
+            <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
+              <Logo height={32} width={32} />
+              <Typography variant="h6" sx={{ ml: 1.5, fontWeight: 700, fontFamily: '"Geist Sans", sans-serif' }}>
+                pdfX
+              </Typography>
+            </Box>
+            <Divider />
+            <List>
+              {menuItems.map((item) => (
+                <ListItem 
+                  key={item.text} 
+                  component={Link} 
+                  to={item.path}
+                  onClick={toggleDrawer}
+                  sx={{
+                    borderRadius: 2,
+                    mx: 1,
+                    mb: 0.5,
+                    '&:hover': {
+                      bgcolor: theme => theme.palette.mode === 'light' 
+                        ? 'rgba(67, 97, 238, 0.08)' 
+                        : 'rgba(67, 97, 238, 0.15)',
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    {item.icon}
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={item.text} 
+                    primaryTypographyProps={{ 
+                      fontFamily: '"Geist Sans", sans-serif',
+                      fontWeight: 500,
+                    }} 
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Drawer>
+          
+          <Box component="main" sx={{ flexGrow: 1, py: 3, px: { xs: 2, sm: 3 } }}>
+            <Routes>
+              <Route path="/" element={<WelcomeScreen />} />
+              <Route path="/merge" element={<PDFMerger />} />
+              <Route path="/split" element={<PDFSplitter />} />
+              <Route path="/compress" element={<PDFCompressor />} />
+              <Route path="/to-images" element={<PDFToImages />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           </Box>
-
-          <TabPanel value={currentTab} index={0}>
-            <PDFMerger />
-          </TabPanel>
-          <TabPanel value={currentTab} index={1}>
-            <PDFSplitter />
-          </TabPanel>
-          <TabPanel value={currentTab} index={2}>
-            <PDFCompressor />
-          </TabPanel>
-          <TabPanel value={currentTab} index={3}>
-            <PDFToImages />
-          </TabPanel>
-        </GlassmorphicContainer>
-        
-        <Box 
-          component="footer" 
-          sx={{ 
-            mt: 4, 
-            py: 3, 
-            textAlign: 'center',
-            opacity: 0.7,
-          }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            pdfX • Secure PDF Manipulation, Completely Client-Side • {new Date().getFullYear()}
-          </Typography>
+          
+          <Box 
+            component="footer" 
+            sx={{ 
+              py: 3, 
+              px: 2, 
+              mt: 'auto',
+              textAlign: 'center',
+              borderTop: theme => `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ fontFamily: '"Geist Sans", sans-serif' }}>
+              © {new Date().getFullYear()} pdfX - All PDF processing happens in your browser for complete privacy
+            </Typography>
+          </Box>
         </Box>
-      </Container>
+      </Router>
     </ThemeProvider>
-  )
+  );
 }
 
-export default App
+export default App;
