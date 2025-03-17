@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
 import { 
@@ -35,7 +35,7 @@ import { saveAs } from 'file-saver';
 import PageHeader from './PageHeader';
 
 // Initialize PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 interface ImagePreview {
   url: string;
@@ -52,6 +52,20 @@ const PDFToImages: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const theme = useTheme();
 
+  // Cleanup function to revoke object URLs
+  const cleanupImages = useCallback(() => {
+    images.forEach(image => {
+      URL.revokeObjectURL(image.url);
+    });
+  }, [images]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupImages();
+    };
+  }, [cleanupImages]);
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
@@ -60,11 +74,12 @@ const PDFToImages: React.FC = () => {
       const arrayBuffer = await file.arrayBuffer();
       await PDFDocument.load(arrayBuffer); // Validate PDF
       setFile(file);
+      cleanupImages(); // Cleanup previous images
       setImages([]);
     } catch (error) {
       setError('Invalid PDF file. Please try another file.');
     }
-  }, []);
+  }, [cleanupImages]);
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
@@ -94,39 +109,61 @@ const PDFToImages: React.FC = () => {
       const newImages: ImagePreview[] = [];
 
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
-        const page = await pdf.getPage(pageNumber);
-        const viewport = page.getViewport({ scale: 2 });
-        
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        if (!context) continue;
+        try {
+          const page = await pdf.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 2 });
+          
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          
+          if (!context) {
+            throw new Error('Failed to get canvas context');
+          }
 
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
 
-        await page.render({
-          canvasContext: context,
-          viewport: viewport
-        }).promise;
+          try {
+            await page.render({
+              canvasContext: context,
+              viewport: viewport
+            }).promise;
 
-        const blob = await new Promise<Blob>((resolve) => {
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-          }, 'image/png', quality / 100);
-        });
+            const blob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob(
+                (blob) => {
+                  if (blob) {
+                    resolve(blob);
+                  } else {
+                    reject(new Error('Failed to create image blob'));
+                  }
+                },
+                'image/png',
+                quality / 100
+              );
+            });
 
-        newImages.push({
-          url: URL.createObjectURL(blob),
-          pageNumber,
-          blob
-        });
+            newImages.push({
+              url: URL.createObjectURL(blob),
+              pageNumber,
+              blob
+            });
 
-        setProgress((pageNumber / totalPages) * 100);
+            setProgress((pageNumber / totalPages) * 100);
+          } catch (renderError) {
+            console.error(`Error rendering page ${pageNumber}:`, renderError);
+            throw new Error(`Failed to render page ${pageNumber}`);
+          }
+        } catch (pageError) {
+          console.error(`Error processing page ${pageNumber}:`, pageError);
+          throw new Error(`Failed to process page ${pageNumber}`);
+        }
       }
 
       setImages(newImages);
     } catch (error) {
-      setError('Failed to convert PDF to images. Please try again.');
+      console.error('PDF conversion error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to convert PDF to images. Please try again.');
     } finally {
       setProcessing(false);
     }
@@ -146,6 +183,7 @@ const PDFToImages: React.FC = () => {
       const fileName = file?.name.replace('.pdf', '') || 'pdf-images';
       saveAs(content, `${fileName}.zip`);
     } catch (error) {
+      console.error('Download error:', error);
       setError('Failed to download images. Please try again.');
     }
   };
@@ -153,7 +191,7 @@ const PDFToImages: React.FC = () => {
   const removeImage = (index: number) => {
     setImages(prev => {
       const newImages = [...prev];
-      URL.revokeObjectURL(newImages[index].url);
+      URL.revokeObjectURL(newImages[index].url); // Clean up the URL object
       newImages.splice(index, 1);
       return newImages;
     });
@@ -252,7 +290,7 @@ const PDFToImages: React.FC = () => {
                     </Box>
                   </Box>
 
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                  <Stack direction="row" spacing={2}>
                     {images.length > 0 && (
                       <Button
                         variant="outlined"
@@ -277,7 +315,7 @@ const PDFToImages: React.FC = () => {
                     >
                       {processing ? 'Converting...' : 'Convert to Images'}
                     </Button>
-                  </Box>
+                  </Stack>
                 </Stack>
               </Box>
 
@@ -341,7 +379,7 @@ const PDFToImages: React.FC = () => {
                         objectFit: 'cover'
                       }}
                     />
-                    <CardActions 
+                    <CardActions
                       className="image-actions"
                       sx={{ 
                         position: 'absolute',
