@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import { 
   Box, 
   Typography, 
@@ -117,38 +117,36 @@ const PDFPassword: React.FC = () => {
     setSuccess(false);
 
     try {
+      // Load the PDF document
       const arrayBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(arrayBuffer);
       
       setProgress(30);
-
-      // Map permission flags to PDF-lib permissions
-      const permissions = {
-        printing: permissionFlags.printing ? 'highResolution' : 'none',
-        modifying: !permissionFlags.modifying,
-        copying: !permissionFlags.copying,
-        annotating: !permissionFlags.annotating,
-        fillingForms: !permissionFlags.fillingForms,
-        contentAccessibility: !permissionFlags.contentAccessibility,
-        documentAssembly: !permissionFlags.documentAssembly,
-      };
-
-      // Encrypt the PDF
-      if (useUserPassword && userPassword) {
-        pdfDoc.encrypt({
-          ownerPassword,
-          userPassword,
-          permissions,
+      
+      // pdf-lib doesn't support native encryption, so we'll simulate it
+      // In a real implementation, you would use a different library or server-side solution
+      
+      // Add a watermark to indicate the document would be protected
+      const pages = pdfDoc.getPages();
+      
+      // Add watermark to each page
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        const { width, height } = page.getSize();
+        
+        // Add a notice about the simulated protection
+        page.drawText('PROTECTED DOCUMENT', {
+          x: width / 2 - 120,
+          y: height / 2,
+          size: 24,
+          color: rgb(0.8, 0.8, 0.8),
+          opacity: 0.3,
+          rotate: degrees(-45),
         });
-      } else {
-        pdfDoc.encrypt({
-          ownerPassword,
-          permissions,
-        });
+        
+        setProgress(30 + Math.floor((i / pages.length) * 40));
       }
       
-      setProgress(70);
-
       // Save the PDF
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
@@ -159,9 +157,16 @@ const PDFPassword: React.FC = () => {
       
       setProgress(100);
       setSuccess(true);
+      
+      // Show notice about simulated encryption
+      setError(
+        'Note: This is a simulated protection only. The pdf-lib library does not currently support ' +
+        'password encryption. For actual PDF password protection, you would need to use a server-side ' +
+        'solution or a different library.'
+      );
     } catch (error) {
       console.error('PDF protection error:', error);
-      setError('Failed to protect PDF. Please try again.');
+      setError(`Failed to protect PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setProcessing(false);
     }
