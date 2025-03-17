@@ -7,7 +7,8 @@ import {
   ContentCut as SplitIcon, 
   Compress as CompressIcon, 
   Image as ImageIcon,
-  ArrowForward as ArrowIcon
+  ArrowForward as ArrowIcon,
+  Lock as LockIcon
 } from '@mui/icons-material';
 import Logo from './Logo';
 
@@ -112,6 +113,12 @@ const WelcomeScreen: React.FC = () => {
       description: 'Convert PDF pages to image formats like PNG or JPEG',
       icon: <ImageIcon fontSize="large" />,
       path: '/pdf-to-images'
+    },
+    {
+      title: 'Password Protect PDF',
+      description: 'Add password security and permissions control to your PDFs',
+      icon: <LockIcon fontSize="large" />,
+      path: '/password-pdf'
     }
   ];
 

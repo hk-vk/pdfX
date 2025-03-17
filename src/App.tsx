@@ -26,7 +26,8 @@ import {
   MergeType as MergeIcon,
   ContentCut as SplitIcon,
   Compress as CompressIcon,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Lock as LockIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { lightTheme, darkTheme } from './theme';
@@ -35,6 +36,7 @@ import PDFMerger from './components/PDFMerger';
 import PDFSplitter from './components/PDFSplitter';
 import PDFCompressor from './components/PDFCompressor';
 import PDFToImages from './components/PDFToImages';
+import PDFPassword from './components/PDFPassword';
 import Logo from './components/Logo';
 
 // Create motion components
@@ -89,7 +91,8 @@ const App: React.FC = () => {
     { text: 'Merge PDFs', icon: <MergeIcon />, path: '/merge-pdfs' },
     { text: 'Split PDF', icon: <SplitIcon />, path: '/split-pdf' },
     { text: 'Compress PDF', icon: <CompressIcon />, path: '/compress-pdf' },
-    { text: 'PDF to Images', icon: <ImageIcon />, path: '/pdf-to-images' }
+    { text: 'PDF to Images', icon: <ImageIcon />, path: '/pdf-to-images' },
+    { text: 'Password Protect PDF', icon: <LockIcon />, path: '/password-pdf' }
   ];
 
   const drawer = (
@@ -212,6 +215,7 @@ const App: React.FC = () => {
               <Route path="/split-pdf" element={<PageTransition><PDFSplitter /></PageTransition>} />
               <Route path="/compress-pdf" element={<PageTransition><PDFCompressor /></PageTransition>} />
               <Route path="/pdf-to-images" element={<PageTransition><PDFToImages /></PageTransition>} />
+              <Route path="/password-pdf" element={<PageTransition><PDFPassword /></PageTransition>} />
             </Routes>
           </Box>
           
