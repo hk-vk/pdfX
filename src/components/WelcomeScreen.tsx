@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Grid, Paper, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Typography, Grid, Paper, useTheme } from '@mui/material';
 import { motion } from 'framer-motion';
 import { 
   MergeType as MergeIcon, 
@@ -88,9 +88,6 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ title, description, icon, pat
 };
 
 const WelcomeScreen: React.FC = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
   const features = [
     {
       title: 'Merge PDFs',

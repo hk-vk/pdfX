@@ -24,14 +24,10 @@ import {
   Close,
   FileDownload
 } from '@mui/icons-material';
-import { motion } from 'framer-motion';
 import GlassmorphicContainer from './GlassmorphicContainer';
 
 // Initialize PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
-
-// Motion components
-const MotionPaper = motion(Paper);
 
 interface PDFViewerProps {
   fileUrl: string | null;
@@ -71,7 +67,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const zoomIn = () => setScale(prevScale => Math.min(prevScale + 0.2, 2.5));
   const zoomOut = () => setScale(prevScale => Math.max(prevScale - 0.2, 0.5));
 
-  const handleScaleChange = (event: Event, newValue: number | number[]) => {
+  const handleScaleChange = (_event: Event, newValue: number | number[]) => {
     setScale(newValue as number);
   };
 
@@ -83,15 +79,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       onClose={onClose}
       maxWidth="lg"
       fullWidth
-      PaperComponent={props => (
-        <MotionPaper
-          {...props}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          transition={{ duration: 0.3 }}
-        />
-      )}
+      PaperComponent={Paper}
     >
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6" component="div" sx={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>

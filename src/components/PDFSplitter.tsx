@@ -6,10 +6,8 @@ import {
   Paper, 
   Button, 
   Slider,
-  IconButton,
   Alert,
   Snackbar,
-  useTheme,
   alpha,
   Stack
 } from '@mui/material';
@@ -30,7 +28,6 @@ const PDFSplitter: React.FC = () => {
   const [range, setRange] = useState<[number, number]>([1, 1]);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const theme = useTheme();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -49,7 +46,7 @@ const PDFSplitter: React.FC = () => {
     }
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps } = useDropzone({
     onDrop,
     accept: {
       'application/pdf': ['.pdf']
@@ -58,7 +55,7 @@ const PDFSplitter: React.FC = () => {
     multiple: false
   });
 
-  const handleRangeChange = (event: Event, newValue: number | number[]) => {
+  const handleRangeChange = (_event: Event, newValue: number | number[]) => {
     setRange(newValue as [number, number]);
   };
 

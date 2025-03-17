@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { 
   Button, 
@@ -9,42 +9,25 @@ import {
   List, 
   ListItem, 
   ListItemText, 
-  ListItemIcon, 
   IconButton,
   Alert,
-  Fade,
-  Tooltip,
-  Divider,
   alpha,
-  Chip,
-  Stack,
-  useTheme,
   Snackbar,
   ListItemSecondaryAction
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { saveAs } from 'file-saver';
-import DescriptionIcon from '@mui/icons-material/Description';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import MergeIcon from '@mui/icons-material/Merge';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd';
-import { useDropzone, FileWithPath } from 'react-dropzone';
+import { useDropzone } from 'react-dropzone';
 import PageHeader from './PageHeader';
 import { 
   ArrowUpward as ArrowUpIcon,
   ArrowDownward as ArrowDownIcon
 } from '@mui/icons-material';
-
-// Create motion components
-const MotionPaper = motion(Paper);
-const MotionBox = motion(Box);
-const MotionButton = motion(Button);
 
 const PDFMerger: React.FC = () => {
   const [files, setFiles] = useState<File[]>([]);
@@ -52,10 +35,8 @@ const PDFMerger: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
 
-  const onDrop = useCallback((acceptedFiles: FileWithPath[], fileRejections: any[]) => {
+  const onDrop = useCallback((acceptedFiles: File[], fileRejections: any[]) => {
     if (fileRejections.length > 0) {
       setError('Only PDF files are accepted. Please check your files.');
       return;
@@ -75,7 +56,7 @@ const PDFMerger: React.FC = () => {
     }
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps } = useDropzone({
     onDrop,
     accept: {
       'application/pdf': ['.pdf']
@@ -83,34 +64,9 @@ const PDFMerger: React.FC = () => {
     noClick: files.length > 0, // Disable clicking when we already have files
   });
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      const selectedFiles = Array.from(event.target.files);
-      const validFiles = selectedFiles.filter(file => 
-        file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-      );
-      
-      if (validFiles.length !== selectedFiles.length) {
-        setError('Only PDF files are accepted. Some files were skipped.');
-      }
-      
-      setFiles(prev => [...prev, ...validFiles]);
-    }
-  };
-
   const handleRemoveFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
-
-  const onDragEnd = useCallback((result: DropResult) => {
-    if (!result.destination) return;
-    
-    const items = Array.from(files);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-    
-    setFiles(items);
-  }, [files]);
 
   const validatePDF = async (file: File): Promise<boolean> => {
     try {
@@ -181,10 +137,6 @@ const PDFMerger: React.FC = () => {
     }
   };
 
-  const getTotalSize = () => {
-    return files.reduce((total, file) => total + file.size, 0);
-  };
-
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -195,17 +147,15 @@ const PDFMerger: React.FC = () => {
 
   const moveFile = (fromIndex: number, toDirection: 'up' | 'down') => {
     if (fromIndex < 0 || fromIndex >= files.length) return;
-
-    const items = Array.from(files);
-    const [movedItem] = items.splice(fromIndex, 1);
-
-    if (toDirection === 'up') {
-      items.splice(fromIndex - 1, 0, movedItem);
-    } else {
-      items.splice(fromIndex + 1, 0, movedItem);
-    }
-
-    setFiles(items);
+    
+    const newFiles = [...files];
+    let toIndex = toDirection === 'up' ? fromIndex - 1 : fromIndex + 1;
+    
+    if (toIndex < 0 || toIndex >= files.length) return;
+    
+    // Swap files
+    [newFiles[fromIndex], newFiles[toIndex]] = [newFiles[toIndex], newFiles[fromIndex]];
+    setFiles(newFiles);
   };
 
   return (

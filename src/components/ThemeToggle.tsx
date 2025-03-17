@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconButton, Box, useTheme, alpha } from '@mui/material';
+import { IconButton, Box, alpha } from '@mui/material';
 import { motion } from 'framer-motion';
 import { DarkMode as DarkModeIcon, LightMode as LightModeIcon } from '@mui/icons-material';
 
@@ -14,7 +14,6 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
   toggleColorMode,
   variant = 'simple'
 }) => {
-  const theme = useTheme();
   
   if (variant === 'simple') {
     return (

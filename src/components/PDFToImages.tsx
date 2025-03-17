@@ -8,7 +8,6 @@ import {
   Slider,
   Alert,
   Snackbar,
-  useTheme,
   alpha,
   Stack,
   LinearProgress,
@@ -54,7 +53,7 @@ const PDFToImages: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false);
-  const theme = useTheme();
+  
   const pdfJsScriptRef = useRef<HTMLScriptElement | null>(null);
   const pdfJsWorkerScriptRef = useRef<HTMLScriptElement | null>(null);
 
@@ -130,7 +129,7 @@ const PDFToImages: React.FC = () => {
     multiple: false
   });
 
-  const handleQualityChange = (event: Event, newValue: number | number[]) => {
+  const handleQualityChange = (_event: Event, newValue: number | number[]) => {
     setQuality(newValue as number);
   };
 
@@ -246,7 +245,7 @@ const PDFToImages: React.FC = () => {
     try {
       const zip = new JSZip();
       
-      images.forEach((image, index) => {
+      images.forEach(image => {
         zip.file(`page-${image.pageNumber}.png`, image.blob);
       });
       

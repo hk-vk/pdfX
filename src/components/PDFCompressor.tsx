@@ -8,7 +8,6 @@ import {
   Paper, 
   Slider, 
   useTheme,
-  Divider,
   Alert,
   Fade,
   Grid,
@@ -20,17 +19,15 @@ import {
 import { saveAs } from 'file-saver';
 import Compressor from 'compressorjs';
 import { 
-  FileUpload as FileUploadIcon,
   CompressOutlined as CompressIcon,
   Description as DescriptionIcon,
   Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
   Info as InfoIcon,
   CloudUpload as CloudUploadIcon,
-  Download as DownloadIcon,
   ErrorOutline as ErrorOutlineIcon
 } from '@mui/icons-material';
-import { useDropzone, FileWithPath } from 'react-dropzone';
+import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import GlassmorphicContainer from './GlassmorphicContainer';
 import * as pdfjs from "pdfjs-dist";
@@ -38,7 +35,6 @@ import PDFViewer from './PDFViewer';
 import PageHeader from './PageHeader';
 
 // Create motion components
-const MotionBox = motion(Box);
 const MotionPaper = motion(Paper);
 
 interface FileWithProgress {
@@ -58,7 +54,6 @@ const PDFCompressor: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileWithProgress | null>(null);
   const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
   const [error, setError] = useState<string | null>(null);
 
   // Initialize PDF.js worker
@@ -79,7 +74,7 @@ const PDFCompressor: React.FC = () => {
     setFiles(prev => [...prev, ...newFiles]);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps } = useDropzone({
     onDrop,
     accept: { 'application/pdf': ['.pdf'] },
     multiple: true,
@@ -199,20 +194,6 @@ const PDFCompressor: React.FC = () => {
     }
   };
 
-  // Helper function to convert Blob to base64
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const base64 = dataUrl.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  };
-
   const processFiles = async () => {
     setIsProcessing(true);
     const waitingFiles = files.filter(f => f.status === 'waiting');
@@ -236,7 +217,7 @@ const PDFCompressor: React.FC = () => {
   };
 
   const downloadFile = (fileWithProgress: FileWithProgress) => {
-    if (fileWithProgress.compressedUrl) {
+    if (fileWithProgress.compressedUrl && fileWithProgress.file) {
       const fileName = fileWithProgress.file.name.replace('.pdf', '_compressed.pdf');
       saveAs(fileWithProgress.compressedUrl, fileName);
     }
