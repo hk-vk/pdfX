@@ -18,7 +18,8 @@ import {
   alpha,
   Chip,
   Stack,
-  useTheme
+  useTheme,
+  Snackbar
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { saveAs } from 'file-saver';
@@ -30,7 +31,9 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd';
+import { useDropzone, FileWithPath } from 'react-dropzone';
 
 // Create motion components
 const MotionPaper = motion(Paper);
@@ -42,12 +45,50 @@ const PDFMerger: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
+  const onDrop = useCallback((acceptedFiles: FileWithPath[], fileRejections: any[]) => {
+    if (fileRejections.length > 0) {
+      setError('Only PDF files are accepted. Please check your files.');
+      return;
+    }
+    
+    // Make sure files are PDFs
+    const validFiles = acceptedFiles.filter(file => 
+      file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    );
+    
+    if (validFiles.length !== acceptedFiles.length) {
+      setError('Only PDF files are accepted. Some files were skipped.');
+    }
+    
+    if (validFiles.length > 0) {
+      setFiles(prevFiles => [...prevFiles, ...validFiles]);
+    }
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf']
+    },
+    noClick: files.length > 0, // Disable clicking when we already have files
+  });
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
-      setFiles(prev => [...prev, ...Array.from(event.target.files || [])]);
+      const selectedFiles = Array.from(event.target.files);
+      const validFiles = selectedFiles.filter(file => 
+        file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+      );
+      
+      if (validFiles.length !== selectedFiles.length) {
+        setError('Only PDF files are accepted. Some files were skipped.');
+      }
+      
+      setFiles(prev => [...prev, ...validFiles]);
     }
   };
 
@@ -65,24 +106,57 @@ const PDFMerger: React.FC = () => {
     setFiles(items);
   }, [files]);
 
+  const validatePDF = async (file: File): Promise<boolean> => {
+    try {
+      const fileBuffer = await file.arrayBuffer();
+      // Try to load as PDF to validate
+      await PDFDocument.load(fileBuffer);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
   const mergePDFs = async () => {
     if (files.length === 0) return;
 
     setIsProcessing(true);
     setProgress(0);
     setSuccess(false);
+    setError(null);
 
     try {
+      // Validate all files first
+      let validFiles = [];
+      for (const file of files) {
+        const isValid = await validatePDF(file);
+        if (isValid) {
+          validFiles.push(file);
+        } else {
+          console.error(`Invalid PDF file: ${file.name}`);
+        }
+      }
+
+      if (validFiles.length === 0) {
+        setError('No valid PDF files found. Please check your files.');
+        setIsProcessing(false);
+        return;
+      }
+
+      if (validFiles.length !== files.length) {
+        setError(`Some files were skipped because they were not valid PDFs. Merging ${validFiles.length} files.`);
+      }
+
       const mergedPdf = await PDFDocument.create();
       
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
         const fileBuffer = await file.arrayBuffer();
         const pdf = await PDFDocument.load(fileBuffer);
         const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
         pages.forEach((page) => mergedPdf.addPage(page));
         
-        setProgress(((i + 1) / files.length) * 100);
+        setProgress(((i + 1) / validFiles.length) * 100);
       }
 
       const mergedPdfFile = await mergedPdf.save();
@@ -95,7 +169,7 @@ const PDFMerger: React.FC = () => {
       }, 5000);
     } catch (error) {
       console.error('Error merging PDFs:', error);
-      // TODO: Add error handling UI
+      setError('An error occurred while merging PDFs. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -153,91 +227,96 @@ const PDFMerger: React.FC = () => {
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ duration: 0.3 }}
           >
-            <Paper 
-              variant="outlined" 
-              sx={{ 
-                p: 5,
-                borderRadius: 3,
-                borderStyle: 'dashed',
-                borderWidth: 2,
-                borderColor: theme => alpha(theme.palette.primary.main, 0.2),
-                bgcolor: theme => alpha(theme.palette.primary.main, 0.03),
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                transition: 'all 0.2s ease',
-                cursor: 'pointer',
-                '&:hover': {
-                  borderColor: theme => alpha(theme.palette.primary.main, 0.5),
-                  bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
-                }
-              }}
-              component="label"
-              htmlFor="pdf-file-input"
-            >
-              <input
-                accept=".pdf"
-                style={{ display: 'none' }}
-                id="pdf-file-input"
-                multiple
-                type="file"
-                onChange={handleFileChange}
-                disabled={isProcessing}
-              />
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2, duration: 0.3 }}
+            <div {...getRootProps()}>
+              <Paper 
+                variant="outlined" 
+                sx={{ 
+                  p: 5,
+                  borderRadius: 3,
+                  borderStyle: 'dashed',
+                  borderWidth: 2,
+                  borderColor: theme => isDragActive 
+                    ? theme.palette.primary.main
+                    : alpha(theme.palette.primary.main, 0.2),
+                  bgcolor: theme => isDragActive
+                    ? alpha(theme.palette.primary.main, 0.05)
+                    : alpha(theme.palette.primary.main, 0.03),
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    borderColor: theme => alpha(theme.palette.primary.main, 0.5),
+                    bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+                  }
+                }}
               >
-                <CloudUploadIcon sx={{ 
-                  fontSize: 60, 
-                  color: 'primary.main', 
-                  mb: 2, 
-                  opacity: 0.7 
-                }} />
-              </motion.div>
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.3, duration: 0.3 }}
-              >
-                <Typography variant="h6" gutterBottom fontWeight={600}>
-                  Select PDF Files to Merge
-                </Typography>
-              </motion.div>
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4, duration: 0.3 }}
-              >
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400 }}>
-                  Click to browse or drag and drop PDF files here
-                </Typography>
-              </motion.div>
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.5, duration: 0.3 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Button
-                  variant="contained"
-                  component="span"
-                  disabled={isProcessing}
-                  startIcon={<FileUploadIcon />}
-                  sx={{
-                    background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-                    px: 3,
-                    py: 1.5,
-                  }}
+                <input {...getInputProps()} />
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.2, duration: 0.3 }}
                 >
-                  Select PDF Files
-                </Button>
-              </motion.div>
-            </Paper>
+                  <CloudUploadIcon sx={{ 
+                    fontSize: 60, 
+                    color: 'primary.main', 
+                    mb: 2, 
+                    opacity: 0.7 
+                  }} />
+                </motion.div>
+                <motion.div
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.3, duration: 0.3 }}
+                >
+                  <Typography variant="h6" gutterBottom fontWeight={600}>
+                    Select PDF Files to Merge
+                  </Typography>
+                </motion.div>
+                <motion.div
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.4, duration: 0.3 }}
+                >
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400 }}>
+                    Click to browse or drag and drop PDF files here
+                  </Typography>
+                </motion.div>
+                <motion.div
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.5, duration: 0.3 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Button
+                    variant="contained"
+                    component="label"
+                    disabled={isProcessing}
+                    startIcon={<FileUploadIcon />}
+                    sx={{
+                      background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
+                      px: 3,
+                      py: 1.5,
+                    }}
+                  >
+                    <input
+                      accept=".pdf"
+                      style={{ display: 'none' }}
+                      id="pdf-file-input"
+                      multiple
+                      type="file"
+                      onChange={handleFileChange}
+                      disabled={isProcessing}
+                    />
+                    Select PDF Files
+                  </Button>
+                </motion.div>
+              </Paper>
+            </div>
           </motion.div>
         ) : (
           <MotionBox
@@ -323,125 +402,137 @@ const PDFMerger: React.FC = () => {
               </Box>
             </MotionBox>
 
-            <MotionPaper 
-              variant="outlined" 
-              sx={{ 
-                borderRadius: 3,
-                overflow: 'hidden',
-                borderColor: theme => alpha(theme.palette.divider, 0.1),
-                boxShadow: theme => isDarkMode 
-                  ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
-                  : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
-              }}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.4 }}
-            >
-              <Box sx={{ 
-                p: 2, 
-                bgcolor: theme => alpha(theme.palette.primary.main, isDarkMode ? 0.15 : 0.05),
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                  PDF Files (Drag to Reorder)
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Files will be merged in the order shown below
-                </Typography>
-              </Box>
-              
-              <DragDropContext onDragEnd={onDragEnd}>
-                <Droppable droppableId="pdf-files">
-                  {(provided: DroppableProvided) => (
-                    <List 
-                      sx={{ py: 0 }}
-                      {...provided.droppableProps}
-                      ref={provided.innerRef}
-                    >
-                      <AnimatePresence>
-                        {files.map((file, index) => (
-                          <Draggable key={`${file.name}-${index}`} draggableId={`${file.name}-${index}`} index={index}>
-                            {(provided: DraggableProvided) => (
-                              <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, height: 0 }}
-                                transition={{ duration: 0.2, delay: index * 0.05 }}
-                              >
-                                {index > 0 && <Divider component="li" />}
-                                <ListItem
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  sx={{
-                                    transition: 'background-color 0.2s',
-                                    '&:hover': {
-                                      bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
-                                    },
-                                  }}
-                                  secondaryAction={
-                                    <Tooltip title="Remove file">
-                                      <IconButton 
-                                        edge="end" 
-                                        aria-label="delete"
-                                        onClick={() => handleRemoveFile(index)}
-                                        disabled={isProcessing}
-                                        size="small"
-                                        sx={{
-                                          color: 'error.main',
-                                          opacity: 0.7,
-                                          '&:hover': {
-                                            opacity: 1,
-                                          }
-                                        }}
-                                      >
-                                        <DeleteIcon />
-                                      </IconButton>
-                                    </Tooltip>
-                                  }
+            <div {...getRootProps({ className: 'dropzone' })}>
+              <input {...getInputProps()} />
+              <MotionPaper 
+                variant="outlined" 
+                sx={{ 
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  borderColor: theme => isDragActive 
+                    ? theme.palette.primary.main 
+                    : alpha(theme.palette.divider, 0.1),
+                  boxShadow: theme => isDarkMode 
+                    ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
+                    : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
+                  ...(isDragActive && {
+                    borderColor: 'primary.main',
+                    borderStyle: 'dashed',
+                    bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+                  })
+                }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.4 }}
+              >
+                <Box sx={{ 
+                  p: 2, 
+                  bgcolor: theme => isDragActive
+                    ? alpha(theme.palette.primary.main, 0.1)
+                    : alpha(theme.palette.primary.main, isDarkMode ? 0.15 : 0.05),
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    PDF Files {isDragActive && '(Drop files here)'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {isDragActive ? 'Release to add files' : 'Drag to reorder'}
+                  </Typography>
+                </Box>
+                
+                <DragDropContext onDragEnd={onDragEnd}>
+                  <Droppable droppableId="pdf-files">
+                    {(provided: DroppableProvided) => (
+                      <List 
+                        sx={{ py: 0 }}
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                      >
+                        <AnimatePresence>
+                          {files.map((file, index) => (
+                            <Draggable key={`${file.name}-${index}`} draggableId={`${file.name}-${index}`} index={index}>
+                              {(provided: DraggableProvided) => (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.2, delay: index * 0.05 }}
                                 >
-                                  <ListItemIcon {...provided.dragHandleProps}>
-                                    <DragIndicatorIcon sx={{ color: 'text.secondary', mr: -1 }} />
-                                    <Box sx={{
-                                      width: 36,
-                                      height: 36,
-                                      borderRadius: 1,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      bgcolor: theme => alpha(theme.palette.primary.main, 0.1),
-                                      color: 'primary.main',
-                                    }}>
-                                      <DescriptionIcon />
-                                    </Box>
-                                  </ListItemIcon>
-                                  <ListItemText 
-                                    primary={file.name} 
-                                    secondary={`${formatFileSize(file.size)}`}
-                                    primaryTypographyProps={{
-                                      sx: { 
-                                        fontWeight: 500,
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis'
-                                      }
+                                  {index > 0 && <Divider component="li" />}
+                                  <ListItem
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    sx={{
+                                      transition: 'background-color 0.2s',
+                                      '&:hover': {
+                                        bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+                                      },
                                     }}
-                                  />
-                                </ListItem>
-                              </motion.div>
-                            )}
-                          </Draggable>
-                        ))}
-                      </AnimatePresence>
-                      {provided.placeholder}
-                    </List>
-                  )}
-                </Droppable>
-              </DragDropContext>
-            </MotionPaper>
+                                    secondaryAction={
+                                      <Tooltip title="Remove file">
+                                        <IconButton 
+                                          edge="end" 
+                                          aria-label="delete"
+                                          onClick={() => handleRemoveFile(index)}
+                                          disabled={isProcessing}
+                                          size="small"
+                                          sx={{
+                                            color: 'error.main',
+                                            opacity: 0.7,
+                                            '&:hover': {
+                                              opacity: 1,
+                                            }
+                                          }}
+                                        >
+                                          <DeleteIcon />
+                                        </IconButton>
+                                      </Tooltip>
+                                    }
+                                  >
+                                    <ListItemIcon {...provided.dragHandleProps}>
+                                      <DragIndicatorIcon sx={{ color: 'text.secondary', mr: -1 }} />
+                                      <Box sx={{
+                                        width: 36,
+                                        height: 36,
+                                        borderRadius: 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        bgcolor: theme => alpha(theme.palette.primary.main, 0.1),
+                                        color: 'primary.main',
+                                      }}>
+                                        <DescriptionIcon />
+                                      </Box>
+                                    </ListItemIcon>
+                                    <ListItemText 
+                                      primary={file.name} 
+                                      secondary={`${formatFileSize(file.size)}`}
+                                      primaryTypographyProps={{
+                                        sx: { 
+                                          fontWeight: 500,
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis'
+                                        }
+                                      }}
+                                    />
+                                  </ListItem>
+                                </motion.div>
+                              )}
+                            </Draggable>
+                          ))}
+                        </AnimatePresence>
+                        {provided.placeholder}
+                      </List>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+              </MotionPaper>
+            </div>
           </MotionBox>
         )}
       </AnimatePresence>
@@ -507,6 +598,22 @@ const PDFMerger: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setError(null)} 
+          severity="error" 
+          sx={{ width: '100%' }}
+          icon={<ErrorOutlineIcon />}
+        >
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

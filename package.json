@@ -1,7 +1,8 @@
 {
-  "name": "pdf-toolkit",
+  "name": "pdfx",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Your all-in-one PDF toolkit for merging, splitting, compressing, and converting PDF files - completely offline and secure.",
   "type": "module",
   "scripts": {
     "dev": "vite",
