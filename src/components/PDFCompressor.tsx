@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { 
   Button, 
@@ -12,7 +12,10 @@ import {
   Divider,
   Alert,
   Fade,
-  Grid
+  Grid,
+  Stack,
+  IconButton,
+  Modal
 } from '@mui/material';
 import { saveAs } from 'file-saver';
 import Compressor from 'compressorjs';
@@ -26,67 +29,82 @@ import {
   CloudUpload as CloudUploadIcon
 } from '@mui/icons-material';
 import { useDropzone, FileWithPath } from 'react-dropzone';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import GlassmorphicContainer from './GlassmorphicContainer';
 import * as pdfjs from 'pdfjs-dist';
-
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+import { Document, Page } from 'react-pdf';
 
 // Create motion components
 const MotionBox = motion(Box);
 const MotionPaper = motion(Paper);
 
+interface FileWithProgress {
+  file: File;
+  progress: number;
+  status: 'waiting' | 'processing' | 'completed' | 'error';
+  compressedUrl?: string;
+  error?: string;
+}
+
 const PDFCompressor: React.FC = () => {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<FileWithProgress[]>([]);
+  const [quality, setQuality] = useState<number>(70);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [quality, setQuality] = useState(0.7);
-  const [originalSize, setOriginalSize] = useState(0);
-  const [compressedSize, setCompressedSize] = useState<number | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [previewFile, setPreviewFile] = useState<FileWithProgress | null>(null);
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: useCallback(async (acceptedFiles: FileWithPath[]) => {
-      if (acceptedFiles.length > 0) {
-        const selectedFile = acceptedFiles[0];
-        setFile(selectedFile);
-        setOriginalSize(selectedFile.size);
-        
-        // Get page count
-        try {
-          const fileBuffer = await selectedFile.arrayBuffer();
-          const pdf = await PDFDocument.load(fileBuffer);
-          const count = pdf.getPageCount();
-          setPageCount(count);
-        } catch (error) {
-          console.error('Error loading PDF:', error);
-        }
-      }
-    }, []),
-    maxFiles: 1,
-    accept: {
-      'application/pdf': ['.pdf']
-    },
-    onError: (error) => {
-      console.error('Error uploading file:', error);
+  // Initialize PDF.js worker
+  useEffect(() => {
+    // Set the worker source with a try-catch to handle potential errors
+    try {
+      const workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+    } catch (error) {
+      console.error('Error initializing PDF.js worker:', error);
     }
+  }, []);
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const newFiles = acceptedFiles
+      .filter(file => file.type === 'application/pdf')
+      .map(file => ({
+        file,
+        progress: 0,
+        status: 'waiting' as const,
+      }));
+    setFiles(prev => [...prev, ...newFiles]);
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'application/pdf': ['.pdf'] },
+    multiple: true,
   });
 
-  const compressImage = (imageBlob: Blob, quality: number): Promise<Blob> => {
+  const compressImage = async (imageData: ImageData, quality: number): Promise<Blob> => {
     return new Promise((resolve, reject) => {
-      new Compressor(imageBlob, {
-        quality,
-        success: (result) => resolve(result),
-        error: (err) => reject(err),
-        maxWidth: 1500, // Limit max width to reduce size
-        maxHeight: 1500, // Limit max height to reduce size
-        convertSize: 1000000, // Convert to JPEG if larger than ~1MB
-        mimeType: 'image/jpeg',
-      });
+      const canvas = document.createElement('canvas');
+      canvas.width = imageData.width;
+      canvas.height = imageData.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      // Create an ImageData object
+      ctx.putImageData(imageData, 0, 0);
+      
+      // Convert to blob with specified quality
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Failed to compress image'));
+        },
+        'image/jpeg',
+        quality / 100
+      );
     });
   };
 
@@ -131,406 +149,262 @@ const PDFCompressor: React.FC = () => {
     return { images, dims };
   };
 
-  const compressPDF = async () => {
-    if (!file) return;
-
-    setIsProcessing(true);
-    setProgress(0);
-    setSuccess(false);
-    setCompressedSize(null);
-
+  const compressFile = async (fileWithProgress: FileWithProgress) => {
     try {
-      const fileBuffer = await file.arrayBuffer();
-      
-      // Extract all images from the PDF
-      const { images, dims } = await extractImagesFromPDF(fileBuffer);
-      
-      // Compress each image
-      const compressedImages: Blob[] = [];
-      for (let i = 0; i < images.length; i++) {
-        const image = images[i];
-        // Use higher quality for smaller pages since they compress better
-        const adjustedQuality = Math.min(quality + (0.3 / dims[i].width) * 1000, 0.95);
-        const compressedImage = await compressImage(image, adjustedQuality);
-        compressedImages.push(compressedImage);
-        
-        setProgress((i + 1) / images.length * 50); // First 50% of progress
-      }
-      
-      // Create a new PDF with the compressed images
-      const newPdf = await PDFDocument.create();
-      
-      for (let i = 0; i < compressedImages.length; i++) {
-        const img = compressedImages[i];
-        const imgArrayBuffer = await img.arrayBuffer();
-        
-        // Determine image type from the blob
-        let embedFunc;
-        if (img.type === 'image/jpeg' || img.type === 'image/jpg') {
-          embedFunc = newPdf.embedJpg.bind(newPdf);
-        } else if (img.type === 'image/png') {
-          embedFunc = newPdf.embedPng.bind(newPdf);
-        } else {
-          // Default to PNG
-          embedFunc = newPdf.embedPng.bind(newPdf);
-        }
-        
-        const embeddedImage = await embedFunc(imgArrayBuffer);
-        
-        // Get original dimensions
-        const { width, height } = dims[i];
-        
-        // Add a page with the same dimensions as the original
-        const page = newPdf.addPage([width, height]);
-        
-        // Calculate dimensions to maintain aspect ratio
-        const imgDims = embeddedImage.scale(1);
-        
-        // Draw the image centered on the page
-        page.drawImage(embeddedImage, {
+      const { file } = fileWithProgress;
+      setFiles(prev => prev.map(f => 
+        f.file === file ? { ...f, status: 'processing' } : f
+      ));
+
+      // Load the PDF document
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const pages = pdfDoc.getPages();
+
+      // Process each page
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        const { width, height } = page.getSize();
+
+        // Create a temporary canvas to render the page
+        const canvas = document.createElement('canvas');
+        const scale = 2; // Increase scale for better quality
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Could not get canvas context');
+
+        // Load and render the page using PDF.js
+        const loadingTask = pdfjs.getDocument(arrayBuffer);
+        const pdfJsDoc = await loadingTask.promise;
+        const pdfJsPage = await pdfJsDoc.getPage(i + 1);
+        await pdfJsPage.render({
+          canvasContext: context,
+          viewport: pdfJsPage.getViewport({ scale }),
+        }).promise;
+
+        // Get the image data and compress it
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const compressedBlob = await compressImage(imageData, quality);
+        const compressedArrayBuffer = await compressedBlob.arrayBuffer();
+
+        // Embed the compressed image back into the PDF
+        const compressedImage = await pdfDoc.embedJpg(compressedArrayBuffer);
+        page.drawImage(compressedImage, {
           x: 0,
           y: 0,
-          width: width,
-          height: height,
+          width: page.getWidth(),
+          height: page.getHeight(),
         });
-        
-        setProgress(50 + ((i + 1) / compressedImages.length * 50)); // Last 50% of progress
+
+        // Update progress
+        const progress = ((i + 1) / pages.length) * 100;
+        setFiles(prev => prev.map(f =>
+          f.file === file ? { ...f, progress } : f
+        ));
       }
-      
+
       // Save the compressed PDF
-      const compressedPdfBytes = await newPdf.save({
-        useObjectStreams: true,
-        addDefaultPage: false,
-        objectsPerTick: 100,
-      });
-      
-      const blob = new Blob([compressedPdfBytes], { type: 'application/pdf' });
-      
-      setCompressedSize(blob.size);
-      
-      if (blob.size >= originalSize) {
-        // If compression didn't reduce size, use compression option in pdf-lib
-        const pdfDoc = await PDFDocument.load(fileBuffer);
-        const smallerPdfBytes = await pdfDoc.save({
-          useObjectStreams: true,
-          addDefaultPage: false,
-          objectsPerTick: 100,
-        });
-        const smallerBlob = new Blob([smallerPdfBytes], { type: 'application/pdf' });
-        
-        if (smallerBlob.size < originalSize) {
-          saveAs(smallerBlob, `${file.name.replace('.pdf', '')}_compressed.pdf`);
-          setCompressedSize(smallerBlob.size);
-        } else {
-          // If no compression method worked, just return the original
-          saveAs(new Blob([fileBuffer], { type: 'application/pdf' }), 
-            `${file.name.replace('.pdf', '')}_compressed.pdf`);
-          setCompressedSize(originalSize);
-        }
-      } else {
-        saveAs(blob, `${file.name.replace('.pdf', '')}_compressed.pdf`);
-      }
-      
-      setSuccess(true);
-      
-      // Reset success message after 5 seconds
-      setTimeout(() => {
-        setSuccess(false);
-      }, 5000);
+      const compressedPdfBytes = await pdfDoc.save();
+      const compressedBlob = new Blob([compressedPdfBytes], { type: 'application/pdf' });
+      const compressedUrl = URL.createObjectURL(compressedBlob);
+
+      setFiles(prev => prev.map(f =>
+        f.file === file ? {
+          ...f,
+          status: 'completed',
+          progress: 100,
+          compressedUrl,
+        } : f
+      ));
     } catch (error) {
       console.error('Error compressing PDF:', error);
-      // Fallback to simpler compression if advanced method fails
-      try {
-        const fileBuffer = await file.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(fileBuffer);
-        
-        // Use basic PDF compression options
-        const compressedPdfBytes = await pdfDoc.save({
-          useObjectStreams: true,
-          addDefaultPage: false,
-          objectsPerTick: 100,
-        });
-        
-        const blob = new Blob([compressedPdfBytes], { type: 'application/pdf' });
-        setCompressedSize(blob.size);
-        saveAs(blob, `${file.name.replace('.pdf', '')}_compressed.pdf`);
-        
-        setSuccess(true);
-        setTimeout(() => {
-          setSuccess(false);
-        }, 5000);
-      } catch (fallbackError) {
-        console.error('Fallback compression failed:', fallbackError);
-      }
+      setFiles(prev => prev.map(f =>
+        f.file === fileWithProgress.file ? {
+          ...f,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Failed to compress PDF',
+        } : f
+      ));
+    }
+  };
+
+  const processFiles = async () => {
+    setIsProcessing(true);
+    try {
+      const waitingFiles = files.filter(f => f.status === 'waiting');
+      await Promise.all(waitingFiles.map(compressFile));
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleRemoveFile = () => {
-    setFile(null);
-    setOriginalSize(0);
-    setCompressedSize(null);
-    setPageCount(null);
+  const removeFile = (fileToRemove: File) => {
+    setFiles(prev => {
+      const newFiles = prev.filter(f => f.file !== fileToRemove);
+      // Clean up URLs to prevent memory leaks
+      const fileToRemoveData = prev.find(f => f.file === fileToRemove);
+      if (fileToRemoveData?.compressedUrl) {
+        URL.revokeObjectURL(fileToRemoveData.compressedUrl);
+      }
+      return newFiles;
+    });
   };
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const downloadFile = (fileWithProgress: FileWithProgress) => {
+    if (fileWithProgress.compressedUrl) {
+      const link = document.createElement('a');
+      link.href = fileWithProgress.compressedUrl;
+      link.download = `compressed_${fileWithProgress.file.name}`;
+      link.click();
+    }
   };
 
-  const calculateReduction = (): string => {
-    if (!compressedSize || !originalSize) return '0%';
-    
-    const reduction = ((originalSize - compressedSize) / originalSize) * 100;
-    return `${reduction.toFixed(1)}%`;
+  const openPreview = (file: FileWithProgress) => {
+    setPreviewFile(file);
+  };
+
+  const closePreview = () => {
+    setPreviewFile(null);
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <GlassmorphicContainer 
-        sx={{ 
-          p: 3, 
-          mb: 3,
-          borderRadius: 2,
-        }}
-        blurStrength={10}
-        hoverEffect
-        motionProps={{
-          initial: { opacity: 0, y: 20 },
-          animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.4 }
-        }}
-      >
-        <Typography variant="h6" component="h2" gutterBottom>
-          Upload PDF File
+    <GlassmorphicContainer sx={{ p: 3, borderRadius: 2 }}>
+      <Stack spacing={3}>
+        <Typography variant="h5" gutterBottom>
+          Compress PDF Files
         </Typography>
-        
-        <Box
-          {...getRootProps()}
-          sx={{
-            border: '2px dashed',
-            borderColor: theme => isDragActive 
-              ? theme.palette.primary.main 
-              : alpha(theme.palette.divider, 0.7),
-            borderRadius: 2,
-            p: 3,
-            textAlign: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            bgcolor: theme => isDragActive 
-              ? alpha(theme.palette.primary.main, 0.05) 
-              : 'transparent',
-            '&:hover': {
-              borderColor: theme => theme.palette.primary.main,
-              bgcolor: theme => alpha(theme.palette.primary.main, 0.05)
-            }
-          }}
-        >
-          <input {...getInputProps()} />
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <FileUploadIcon 
-              sx={{ 
-                fontSize: 40, 
-                mb: 1,
-                color: theme => isDragActive 
-                  ? theme.palette.primary.main 
-                  : alpha(theme.palette.text.primary, 0.7)
-              }} 
-            />
-            <Typography variant="body1" gutterBottom>
-              Drag & drop a PDF file here, or click to select
-            </Typography>
-            <Typography variant="body2" color="textSecondary">
-              Only one PDF file can be processed at a time
-            </Typography>
-          </motion.div>
-        </Box>
-      </GlassmorphicContainer>
 
-      {file && (
-        <GlassmorphicContainer 
-          sx={{ 
-            p: 3, 
-            mb: 3,
-            borderRadius: 2,
-          }}
-          blurStrength={10}
-          motionProps={{
-            initial: { opacity: 0, y: 20 },
-            animate: { opacity: 1, y: 0 },
-            transition: { duration: 0.4, delay: 0.2 }
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <DescriptionIcon sx={{ mr: 1, color: 'primary.main' }} />
-            <Typography variant="h6" component="h2">
-              {file.name}
-            </Typography>
-          </Box>
-          
-          <Divider sx={{ my: 2 }} />
-          
-          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'medium' }}>
-            Compression Level
-          </Typography>
-          
-          <Box sx={{ px: 2, pt: 1, pb: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2" color="textSecondary">Low (Better Quality)</Typography>
-              <Typography variant="body2" color="textSecondary">High (Smaller Size)</Typography>
-            </Box>
-            <Slider
-              value={quality}
-              onChange={(_, newValue) => setQuality(newValue as number)}
-              aria-labelledby="compression-slider"
-              valueLabelDisplay="auto"
-              step={0.1}
-              marks
-              min={0.1}
-              max={1}
-              sx={{ 
-                color: 'primary.main',
-                '& .MuiSlider-thumb': {
-                  '&:hover, &.Mui-focusVisible': {
-                    boxShadow: theme => `0px 0px 0px 8px ${alpha(theme.palette.primary.main, 0.16)}`
-                  }
-                }
-              }}
-            />
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
-              <Typography variant="body1" fontWeight="medium">
-                Level: {Math.round(quality * 100)}%
-              </Typography>
-            </Box>
-          </Box>
-          
-          {compressedSize && (
-            <>
-              <Divider sx={{ my: 2 }} />
-              <Box>
-                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'medium' }}>
-                  Compression Results
-                </Typography>
-                <Grid container spacing={3} sx={{ mt: 1 }}>
-                  <Grid item xs={6} md={3}>
-                    <Typography variant="caption" color="text.secondary">
-                      Original Size
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {formatFileSize(originalSize)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6} md={3}>
-                    <Typography variant="caption" color="text.secondary">
-                      Compressed Size
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {formatFileSize(compressedSize)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6} md={3}>
-                    <Typography variant="caption" color="text.secondary">
-                      Size Reduction
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium" color="success.main">
-                      {calculateReduction()}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6} md={3}>
-                    <Typography variant="caption" color="text.secondary">
-                      Quality Setting
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {Math.round(quality * 100)}%
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </Box>
-            </>
-          )}
-        </GlassmorphicContainer>
-      )}
-
-      {file && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.4 }}
-        >
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<CompressIcon />}
-            onClick={compressPDF}
-            disabled={isProcessing}
-            fullWidth
-            size="large"
-            sx={{ 
-              py: 1.5,
+        <Box {...getRootProps()} sx={{ cursor: 'pointer' }}>
+          <GlassmorphicContainer
+            sx={{
+              p: 4,
               borderRadius: 2,
-              boxShadow: theme => theme.shadows[4],
-              background: theme => `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
-              transition: 'all 0.3s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: theme => theme.shadows[8],
-              }
+              textAlign: 'center',
+              border: '2px dashed',
+              borderColor: theme => isDragActive ? theme.palette.primary.main : 'inherit',
             }}
           >
-            Compress PDF
-          </Button>
-        </motion.div>
-      )}
+            <input {...getInputProps()} />
+            <Typography>
+              {isDragActive
+                ? 'Drop your PDF files here...'
+                : 'Drag & drop PDF files here, or click to select files'}
+            </Typography>
+          </GlassmorphicContainer>
+        </Box>
 
-      {isProcessing && (
-        <Box sx={{ width: '100%', mt: 4 }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 1
-          }}>
-            <Typography variant="body2" color="text.secondary">
-              Compressing PDF...
-            </Typography>
-            <Typography variant="body2" color="primary" fontWeight={600}>
-              {Math.round(progress)}%
-            </Typography>
-          </Box>
-          <LinearProgress 
-            variant="determinate" 
-            value={progress} 
-            sx={{ 
-              height: 8, 
-              borderRadius: 4,
-            }}
+        <Box>
+          <Typography gutterBottom>Compression Quality: {quality}%</Typography>
+          <Slider
+            value={quality}
+            onChange={(_, value) => setQuality(value as number)}
+            min={30}
+            max={100}
+            valueLabelDisplay="auto"
           />
         </Box>
-      )}
 
-      <Fade in={success}>
-        <Alert 
-          icon={<CheckCircleIcon fontSize="inherit" />} 
-          severity="success"
-          sx={{ 
-            mt: 3,
-            borderRadius: 2,
-            boxShadow: theme => `0 4px 12px ${alpha(theme.palette.success.main, 0.2)}`,
-          }}
-        >
-          PDF successfully compressed! Your download should start automatically.
-        </Alert>
-      </Fade>
-    </Box>
+        <AnimatePresence>
+          {files.map((fileWithProgress) => (
+            <motion.div
+              key={fileWithProgress.file.name}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, x: -100 }}
+            >
+              <GlassmorphicContainer
+                sx={{
+                  p: 2,
+                  mb: 1,
+                  borderRadius: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                }}
+              >
+                <Box flex={1}>
+                  <Typography variant="body2" noWrap>
+                    {fileWithProgress.file.name}
+                  </Typography>
+                  {fileWithProgress.status === 'processing' && (
+                    <LinearProgress
+                      variant="determinate"
+                      value={fileWithProgress.progress}
+                      sx={{ mt: 1 }}
+                    />
+                  )}
+                  {fileWithProgress.status === 'error' && (
+                    <Typography color="error" variant="caption">
+                      {fileWithProgress.error}
+                    </Typography>
+                  )}
+                </Box>
+
+                <Stack direction="row" spacing={1}>
+                  {fileWithProgress.status === 'completed' && (
+                    <>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => openPreview(fileWithProgress)}
+                      >
+                        Preview
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => downloadFile(fileWithProgress)}
+                      >
+                        Download
+                      </Button>
+                    </>
+                  )}
+                  <IconButton
+                    size="small"
+                    onClick={() => removeFile(fileWithProgress.file)}
+                    color="error"
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Stack>
+              </GlassmorphicContainer>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+
+        {files.length > 0 && (
+          <Button
+            variant="contained"
+            onClick={processFiles}
+            disabled={isProcessing || !files.some(f => f.status === 'waiting')}
+          >
+            {isProcessing ? 'Compressing...' : 'Compress Files'}
+          </Button>
+        )}
+      </Stack>
+
+      <Modal open={Boolean(previewFile)} onClose={closePreview}>
+        <Box sx={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          maxWidth: '90%',
+          maxHeight: '90%',
+          overflowY: 'auto',
+          bgcolor: 'background.paper',
+          boxShadow: 24,
+          p: 4,
+        }}>
+          {previewFile && (
+            <Document file={previewFile.compressedUrl}>
+              <Page pageNumber={1} />
+            </Document>
+          )}
+        </Box>
+      </Modal>
+    </GlassmorphicContainer>
   );
 };
 
