@@ -1,13 +1,73 @@
-# PDF Toolkit
+# pdfX - Your All-in-One PDF Toolkit
 
-A fully client-side and offline web application that provides a comprehensive set of PDF manipulation tools. Built with React, TypeScript, and Material-UI, this application performs all operations entirely in the browser without any server interaction.
+A modern web application for working with PDF files. Merge, split, compress, and convert PDFs to images - all in your browser with no data sent to servers.
 
 ## Features
 
-- **Merge PDFs**: Combine multiple PDF files into a single PDF document
-- **Split PDFs**: Split a PDF into multiple files based on page ranges
-- **Compress PDFs**: Reduce PDF file size by optimizing embedded images
-- **Convert PDF to Images**: Convert PDF pages to PNG or JPEG images
+- PDF Merger: Combine multiple PDFs into a single document
+- PDF Splitter: Extract specific pages from a PDF
+- PDF Compressor: Reduce PDF file size
+- PDF to Images: Convert PDF pages to high-quality PNG images
+
+## Deployment to Cloudflare Pages
+
+### Manual Deployment
+
+1. Build the project:
+   ```bash
+   npm install
+   npm run build
+   ```
+
+2. The build output will be in the `dist` directory.
+
+3. Deploy to Cloudflare Pages:
+   - Log in to your Cloudflare dashboard
+   - Go to Pages > Create a project
+   - Connect your GitHub repository or upload the `dist` directory
+   - Configure the build settings:
+     - Build command: `npm run build`
+     - Build output directory: `dist`
+   - Deploy!
+
+### GitHub Actions Deployment (Recommended)
+
+This project includes a GitHub Actions workflow for automatic deployment to Cloudflare Pages.
+
+To set it up:
+
+1. In your Cloudflare dashboard, create an API token with the "Edit Cloudflare Pages" permission.
+
+2. In your GitHub repository settings, add the following secrets:
+   - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token
+   - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
+
+3. Push to the main branch, and GitHub Actions will automatically deploy to Cloudflare Pages.
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+## Technologies Used
+
+- React
+- TypeScript
+- Vite
+- Material UI
+- PDF.js
+- pdf-lib
 
 ## Getting Started
 
