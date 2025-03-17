@@ -83,10 +83,10 @@ const PDFToImages: React.FC = () => {
 
     // Cleanup on unmount
     return () => {
-      if (pdfJsScriptRef.current) {
+      if (pdfJsScriptRef.current && document.body.contains(pdfJsScriptRef.current)) {
         document.body.removeChild(pdfJsScriptRef.current);
       }
-      if (pdfJsWorkerScriptRef.current) {
+      if (pdfJsWorkerScriptRef.current && document.body.contains(pdfJsWorkerScriptRef.current)) {
         document.body.removeChild(pdfJsWorkerScriptRef.current);
       }
     };
