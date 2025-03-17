@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { PDFDocument } from 'pdf-lib';
-import * as pdfjs from 'pdfjs-dist';
 import { 
   Box, 
   Typography, 
@@ -33,9 +32,6 @@ import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import PageHeader from './PageHeader';
-
-// Initialize PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 interface ImagePreview {
   url: string;
@@ -104,56 +100,74 @@ const PDFToImages: React.FC = () => {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-      const totalPages = pdf.numPages;
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const totalPages = pdfDoc.getPageCount();
       const newImages: ImagePreview[] = [];
 
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
         try {
-          const page = await pdf.getPage(pageNumber);
-          const viewport = page.getViewport({ scale: 2 });
-          
+          // Create a new document for each page
+          const singlePageDoc = await PDFDocument.create();
+          const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageNumber - 1]);
+          singlePageDoc.addPage(copiedPage);
+
+          // Convert page to PNG using canvas
+          const pdfBytes = await singlePageDoc.save();
+          const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+
+          // Create an image from the PDF page
+          const img = new Image();
           const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          
-          if (!context) {
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
             throw new Error('Failed to get canvas context');
           }
 
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
+          // Convert PDF page to image
+          await new Promise<void>((resolve, reject) => {
+            img.onload = async () => {
+              try {
+                const scale = 2; // Higher scale for better quality
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                ctx.scale(scale, scale);
+                ctx.drawImage(img, 0, 0);
+                
+                // Convert to PNG with specified quality
+                const imageBlob = await new Promise<Blob>((resolve, reject) => {
+                  canvas.toBlob(
+                    (blob) => {
+                      if (blob) {
+                        resolve(blob);
+                      } else {
+                        reject(new Error('Failed to create image blob'));
+                      }
+                    },
+                    'image/png',
+                    quality / 100
+                  );
+                });
 
-          try {
-            await page.render({
-              canvasContext: context,
-              viewport: viewport
-            }).promise;
+                newImages.push({
+                  url: URL.createObjectURL(imageBlob),
+                  pageNumber,
+                  blob: imageBlob
+                });
 
-            const blob = await new Promise<Blob>((resolve, reject) => {
-              canvas.toBlob(
-                (blob) => {
-                  if (blob) {
-                    resolve(blob);
-                  } else {
-                    reject(new Error('Failed to create image blob'));
-                  }
-                },
-                'image/png',
-                quality / 100
-              );
-            });
+                // Cleanup
+                URL.revokeObjectURL(url);
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
+            };
+            img.onerror = () => reject(new Error('Failed to load PDF page'));
+            img.src = url;
+          });
 
-            newImages.push({
-              url: URL.createObjectURL(blob),
-              pageNumber,
-              blob
-            });
-
-            setProgress((pageNumber / totalPages) * 100);
-          } catch (renderError) {
-            console.error(`Error rendering page ${pageNumber}:`, renderError);
-            throw new Error(`Failed to render page ${pageNumber}`);
-          }
+          setProgress((pageNumber / totalPages) * 100);
         } catch (pageError) {
           console.error(`Error processing page ${pageNumber}:`, pageError);
           throw new Error(`Failed to process page ${pageNumber}`);
