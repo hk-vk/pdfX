@@ -141,26 +141,31 @@ const WelcomeScreen: React.FC = () => {
           sx={{ 
             mt: 2,
             fontWeight: 800,
+            fontFamily: "'Montserrat', sans-serif",
             background: theme.palette.mode === 'dark' 
               ? 'linear-gradient(90deg, #8a7fbd 0%, #6c5dac 100%)' 
               : 'linear-gradient(90deg, #6c5dac 0%, #41376c 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
-            textFillColor: 'transparent'
+            textFillColor: 'transparent',
+            letterSpacing: '-1px',
+            textTransform: 'uppercase'
           }}
         >
-          PDF Toolkit
+          pdfX
         </Typography>
         <Typography 
           variant="h6" 
           color="text.secondary" 
           sx={{ 
             maxWidth: '600px',
-            mb: 2
+            mb: 2,
+            fontFamily: "'Montserrat', sans-serif",
+            fontWeight: 500
           }}
         >
-          Fast, secure PDF tools that work entirely in your browser
+          Transform your PDFs with superpowers! 🚀
         </Typography>
       </Box>
 
@@ -170,10 +175,11 @@ const WelcomeScreen: React.FC = () => {
         sx={{ 
           mb: 3, 
           fontWeight: 600,
-          textAlign: { xs: 'center', sm: 'left' }
+          textAlign: { xs: 'center', sm: 'left' },
+          fontFamily: "'Montserrat', sans-serif",
         }}
       >
-        What would you like to do?
+        What PDF magic shall we perform today? ✨
       </Typography>
 
       <Grid container spacing={3}>

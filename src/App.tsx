@@ -96,8 +96,8 @@ const App: React.FC = () => {
     <Box sx={{ width: 250 }} role="presentation" onClick={toggleDrawer}>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
         <Logo height={32} width={32} />
-        <Typography variant="h6" sx={{ ml: 1, fontWeight: 600 }}>
-          PDF Toolkit
+        <Typography variant="h6" sx={{ ml: 1, fontWeight: 600, fontFamily: "'Montserrat', sans-serif" }}>
+          pdfX
         </Typography>
       </Box>
       <Divider />
@@ -168,10 +168,12 @@ const App: React.FC = () => {
                   sx={{ 
                     ml: 1,
                     fontWeight: 700,
-                    display: { xs: 'none', sm: 'block' }
+                    display: { xs: 'none', sm: 'block' },
+                    fontFamily: "'Montserrat', sans-serif",
+                    letterSpacing: '-0.5px'
                   }}
                 >
-                  PDF Toolkit
+                  pdfX
                 </Typography>
               </Box>
               
@@ -244,7 +246,7 @@ const App: React.FC = () => {
               color="text.secondary" 
               align="center"
             >
-              © {new Date().getFullYear()} PDF Toolkit. All rights reserved.
+              © {new Date().getFullYear()} pdfX. All rights reserved.
             </Typography>
           </Box>
         </Box>

@@ -22,21 +22,36 @@ const Logo: React.FC<LogoProps> = ({ width = 40, height = 40 }) => {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect
-        x="4"
-        y="4"
-        width="32"
-        height="32"
-        rx="8"
+      {/* Background shape */}
+      <path
+        d="M8 4h24a4 4 0 014 4v24a4 4 0 01-4 4H8a4 4 0 01-4-4V8a4 4 0 014-4z"
         fill={`url(#gradient-${isDarkMode ? 'dark' : 'light'})`}
       />
+      
+      {/* Text elements */}
+      <text
+        x="20"
+        y="25"
+        fontSize="16"
+        fontWeight="bold"
+        fontFamily="Montserrat, sans-serif"
+        fill="white"
+        textAnchor="middle"
+        letterSpacing="0"
+      >
+        pdfX
+      </text>
+      
+      {/* Decorative elements */}
       <path
-        d="M12 14H28M12 20H28M12 26H22"
+        d="M12 30l4-4m12 4l-4-4"
         stroke="white"
-        strokeWidth="2.5"
+        strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
+        opacity="0.6"
       />
+
       <defs>
         <linearGradient
           id={`gradient-${isDarkMode ? 'dark' : 'light'}`}
