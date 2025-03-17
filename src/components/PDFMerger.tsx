@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { 
   Button, 
@@ -19,7 +19,8 @@ import {
   Chip,
   Stack,
   useTheme,
-  Snackbar
+  Snackbar,
+  ListItemSecondaryAction
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { saveAs } from 'file-saver';
@@ -34,6 +35,11 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd';
 import { useDropzone, FileWithPath } from 'react-dropzone';
+import PageHeader from './PageHeader';
+import { 
+  ArrowUpward as ArrowUpIcon,
+  ArrowDownward as ArrowDownIcon
+} from '@mui/icons-material';
 
 // Create motion components
 const MotionPaper = motion(Paper);
@@ -187,355 +193,159 @@ const PDFMerger: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const moveFile = (fromIndex: number, toDirection: 'up' | 'down') => {
+    if (fromIndex < 0 || fromIndex >= files.length) return;
+
+    const items = Array.from(files);
+    const [movedItem] = items.splice(fromIndex, 1);
+
+    if (toDirection === 'up') {
+      items.splice(fromIndex - 1, 0, movedItem);
+    } else {
+      items.splice(fromIndex + 1, 0, movedItem);
+    }
+
+    setFiles(items);
+  };
+
   return (
     <Box>
-      <Box sx={{ mb: 4 }}>
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Typography variant="h5" gutterBottom sx={{ 
-            mb: 1,
-            fontWeight: 700,
-            background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}>
-            Merge Multiple PDF Files
-          </Typography>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Combine multiple PDF files into a single document. Select files in the order you want them to appear or drag to reorder.
-          </Typography>
-        </motion.div>
-      </Box>
-      
-      <AnimatePresence mode="wait">
-        {files.length === 0 ? (
-          <motion.div
-            key="upload"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div {...getRootProps()}>
-              <Paper 
-                variant="outlined" 
-                sx={{ 
-                  p: 5,
-                  borderRadius: 3,
-                  borderStyle: 'dashed',
-                  borderWidth: 2,
-                  borderColor: theme => isDragActive 
-                    ? theme.palette.primary.main
-                    : alpha(theme.palette.primary.main, 0.2),
-                  bgcolor: theme => isDragActive
-                    ? alpha(theme.palette.primary.main, 0.05)
-                    : alpha(theme.palette.primary.main, 0.03),
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textAlign: 'center',
-                  transition: 'all 0.2s ease',
-                  cursor: 'pointer',
-                  '&:hover': {
-                    borderColor: theme => alpha(theme.palette.primary.main, 0.5),
-                    bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
-                  }
-                }}
-              >
-                <input {...getInputProps()} />
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.2, duration: 0.3 }}
-                >
-                  <CloudUploadIcon sx={{ 
-                    fontSize: 60, 
-                    color: 'primary.main', 
-                    mb: 2, 
-                    opacity: 0.7 
-                  }} />
-                </motion.div>
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3, duration: 0.3 }}
-                >
-                  <Typography variant="h6" gutterBottom fontWeight={600}>
-                    Select PDF Files to Merge
-                  </Typography>
-                </motion.div>
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.4, duration: 0.3 }}
-                >
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400 }}>
-                    Click to browse or drag and drop PDF files here
-                  </Typography>
-                </motion.div>
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.5, duration: 0.3 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Button
-                    variant="contained"
-                    component="label"
-                    disabled={isProcessing}
-                    startIcon={<FileUploadIcon />}
-                    sx={{
-                      background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-                      px: 3,
-                      py: 1.5,
-                    }}
-                  >
-                    <input
-                      accept=".pdf"
-                      style={{ display: 'none' }}
-                      id="pdf-file-input"
-                      multiple
-                      type="file"
-                      onChange={handleFileChange}
-                      disabled={isProcessing}
-                    />
-                    Select PDF Files
-                  </Button>
-                </motion.div>
-              </Paper>
-            </div>
-          </motion.div>
-        ) : (
-          <MotionBox
-            key="file-list"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-          >
-            <MotionBox 
-              sx={{ 
-                display: 'flex', 
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                mb: 3,
-                flexWrap: 'wrap',
-                gap: 2
-              }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2, duration: 0.3 }}
-            >
-              <Stack direction="row" spacing={2} alignItems="center">
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Chip 
-                    icon={<DescriptionIcon />} 
-                    label={`${files.length} file${files.length !== 1 ? 's' : ''}`} 
-                    color="primary" 
-                    variant="outlined"
-                  />
-                </motion.div>
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Chip 
-                    icon={<InfoOutlinedIcon />} 
-                    label={`Total size: ${formatFileSize(getTotalSize())}`} 
-                    variant="outlined"
-                  />
-                </motion.div>
-              </Stack>
-              
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <input
-                  accept=".pdf"
-                  style={{ display: 'none' }}
-                  id="pdf-file-input-add"
-                  multiple
-                  type="file"
-                  onChange={handleFileChange}
-                  disabled={isProcessing}
-                />
-                <label htmlFor="pdf-file-input-add">
-                  <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                    <Button
-                      variant="outlined"
-                      component="span"
-                      disabled={isProcessing}
-                      startIcon={<FileUploadIcon />}
-                      size="small"
-                    >
-                      Add More
-                    </Button>
-                  </motion.div>
-                </label>
-                
-                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={mergePDFs}
-                    disabled={isProcessing}
-                    startIcon={<MergeIcon />}
-                    sx={{
-                      background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-                      boxShadow: "0 4px 14px rgba(67, 97, 238, 0.2)",
-                      '&:hover': {
-                        boxShadow: "0 8px 16px rgba(67, 97, 238, 0.3)"
-                      }
-                    }}
-                  >
-                    Merge Files
-                  </Button>
-                </motion.div>
-              </Box>
-            </MotionBox>
+      <PageHeader
+        title="Merge PDFs"
+        description="Combine multiple PDF files into a single document. Simply drag and drop your files, arrange them in the desired order, and merge them together."
+        icon={<MergeIcon sx={{ fontSize: 32 }} />}
+      />
 
-            <div {...getRootProps({ className: 'dropzone' })}>
-              <input {...getInputProps()} />
-              <MotionPaper 
-                variant="outlined" 
-                sx={{ 
-                  borderRadius: 3,
-                  overflow: 'hidden',
-                  borderColor: theme => isDragActive 
-                    ? theme.palette.primary.main 
-                    : alpha(theme.palette.divider, 0.1),
-                  boxShadow: theme => isDarkMode 
-                    ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
-                    : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
-                  ...(isDragActive && {
-                    borderColor: 'primary.main',
-                    borderStyle: 'dashed',
-                    bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
-                  })
-                }}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3, duration: 0.4 }}
-              >
-                <Box sx={{ 
-                  p: 2, 
-                  bgcolor: theme => isDragActive
-                    ? alpha(theme.palette.primary.main, 0.1)
-                    : alpha(theme.palette.primary.main, isDarkMode ? 0.15 : 0.05),
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                    PDF Files {isDragActive && '(Drop files here)'}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {isDragActive ? 'Release to add files' : 'Drag to reorder'}
-                  </Typography>
-                </Box>
-                
-                <DragDropContext onDragEnd={onDragEnd}>
-                  <Droppable droppableId="pdf-files">
-                    {(provided: DroppableProvided) => (
-                      <List 
-                        sx={{ py: 0 }}
-                        {...provided.droppableProps}
-                        ref={provided.innerRef}
-                      >
-                        <AnimatePresence>
-                          {files.map((file, index) => (
-                            <Draggable key={`${file.name}-${index}`} draggableId={`${file.name}-${index}`} index={index}>
-                              {(provided: DraggableProvided) => (
-                                <motion.div
-                                  initial={{ opacity: 0, y: 10 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  transition={{ duration: 0.2, delay: index * 0.05 }}
-                                >
-                                  {index > 0 && <Divider component="li" />}
-                                  <ListItem
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    sx={{
-                                      transition: 'background-color 0.2s',
-                                      '&:hover': {
-                                        bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
-                                      },
-                                    }}
-                                    secondaryAction={
-                                      <Tooltip title="Remove file">
-                                        <IconButton 
-                                          edge="end" 
-                                          aria-label="delete"
-                                          onClick={() => handleRemoveFile(index)}
-                                          disabled={isProcessing}
-                                          size="small"
-                                          sx={{
-                                            color: 'error.main',
-                                            opacity: 0.7,
-                                            '&:hover': {
-                                              opacity: 1,
-                                            }
-                                          }}
-                                        >
-                                          <DeleteIcon />
-                                        </IconButton>
-                                      </Tooltip>
-                                    }
-                                  >
-                                    <ListItemIcon {...provided.dragHandleProps}>
-                                      <DragIndicatorIcon sx={{ color: 'text.secondary', mr: -1 }} />
-                                      <Box sx={{
-                                        width: 36,
-                                        height: 36,
-                                        borderRadius: 1,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        bgcolor: theme => alpha(theme.palette.primary.main, 0.1),
-                                        color: 'primary.main',
-                                      }}>
-                                        <DescriptionIcon />
-                                      </Box>
-                                    </ListItemIcon>
-                                    <ListItemText 
-                                      primary={file.name} 
-                                      secondary={`${formatFileSize(file.size)}`}
-                                      primaryTypographyProps={{
-                                        sx: { 
-                                          fontWeight: 500,
-                                          whiteSpace: 'nowrap',
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis'
-                                        }
-                                      }}
-                                    />
-                                  </ListItem>
-                                </motion.div>
-                              )}
-                            </Draggable>
-                          ))}
-                        </AnimatePresence>
-                        {provided.placeholder}
-                      </List>
-                    )}
-                  </Droppable>
-                </DragDropContext>
-              </MotionPaper>
-            </div>
-          </MotionBox>
-        )}
-      </AnimatePresence>
+      <Paper
+        elevation={0}
+        sx={{
+          p: 3,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: theme => theme.palette.mode === 'dark'
+            ? 'rgba(31, 31, 31, 0.8)'
+            : 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        <Box
+          {...getRootProps()}
+          sx={{
+            border: '2px dashed',
+            borderColor: 'primary.main',
+            borderRadius: 2,
+            p: 4,
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            backgroundColor: theme => alpha(theme.palette.primary.main, 0.05),
+            '&:hover': {
+              backgroundColor: theme => alpha(theme.palette.primary.main, 0.08),
+              borderColor: 'primary.dark'
+            }
+          }}
+        >
+          <input {...getInputProps()} />
+          <FileUploadIcon 
+            sx={{ 
+              fontSize: 48, 
+              color: 'primary.main',
+              mb: 2
+            }} 
+          />
+          <Typography variant="h6" gutterBottom sx={{ fontFamily: "'Montserrat', sans-serif" }}>
+            Drop PDF files here
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            or click to select files
+          </Typography>
+        </Box>
+
+        <AnimatePresence>
+          {files.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <List sx={{ mt: 3 }}>
+                {files.map((file, index) => (
+                  <motion.div
+                    key={file.name}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ListItem
+                      sx={{
+                        mb: 1,
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        '&:hover': {
+                          backgroundColor: theme => alpha(theme.palette.primary.main, 0.05)
+                        }
+                      }}
+                    >
+                      <ListItemText 
+                        primary={file.name}
+                        secondary={`${formatFileSize(file.size)}`}
+                        primaryTypographyProps={{
+                          sx: { fontWeight: 500 }
+                        }}
+                      />
+                      <ListItemSecondaryAction>
+                        <IconButton
+                          size="small"
+                          onClick={() => moveFile(index, 'up')}
+                          disabled={index === 0}
+                        >
+                          <ArrowUpIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => moveFile(index, 'down')}
+                          disabled={index === files.length - 1}
+                        >
+                          <ArrowDownIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveFile(index)}
+                          sx={{ color: 'error.main' }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  </motion.div>
+                ))}
+              </List>
+
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="contained"
+                  onClick={mergePDFs}
+                  disabled={isProcessing || files.length < 2}
+                  startIcon={<MergeIcon />}
+                  sx={{
+                    background: theme => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                    color: 'white',
+                    '&:hover': {
+                      background: theme => `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`
+                    }
+                  }}
+                >
+                  {isProcessing ? 'Merging...' : 'Merge PDFs'}
+                </Button>
+              </Box>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </Paper>
 
       {isProcessing && (
         <motion.div

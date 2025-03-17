@@ -16,7 +16,8 @@ import {
   ListItemText,
   Divider,
   Container,
-  useTheme
+  useTheme,
+  Grid
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -218,21 +219,69 @@ const App: React.FC = () => {
           <Box 
             component="footer" 
             sx={{ 
-              py: 3, 
-              px: 2, 
+              py: 4,
+              px: 3,
               mt: 'auto',
-              backgroundColor: 'background.paper',
+              backgroundColor: theme.palette.mode === 'dark' 
+                ? 'rgba(18, 18, 18, 0.8)'
+                : 'rgba(240, 238, 229, 0.8)',
+              backdropFilter: 'blur(10px)',
               borderTop: 1,
               borderColor: 'divider'
             }}
           >
-            <Typography 
-              variant="body2" 
-              color="text.secondary" 
-              align="center"
-            >
-              © {new Date().getFullYear()} pdfX. All rights reserved.
-            </Typography>
+            <Container maxWidth="lg">
+              <Grid container spacing={4}>
+                <Grid item xs={12} sm={4}>
+                  <Box sx={{ mb: 2 }}>
+                    <Logo size="small" />
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    Transform your PDFs with powerful tools that work entirely in your browser.
+                    Fast, secure, and completely offline.
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="subtitle2" color="text.primary" sx={{ mb: 2, fontWeight: 600 }}>
+                    Quick Links
+                  </Typography>
+                  <Grid container spacing={1}>
+                    {navItems.map((item) => (
+                      <Grid item xs={6} key={item.text}>
+                        <Link
+                          to={item.path}
+                          style={{ textDecoration: 'none' }}
+                        >
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              '&:hover': {
+                                color: 'primary.main',
+                              }
+                            }}
+                          >
+                            {item.text}
+                          </Typography>
+                        </Link>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="subtitle2" color="text.primary" sx={{ mb: 2, fontWeight: 600 }}>
+                    About
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    pdfX is built with privacy in mind. All processing happens locally in your browser.
+                    Your files never leave your device.
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    © {new Date().getFullYear()} pdfX. All rights reserved.
+                  </Typography>
+                </Grid>
+              </Grid>
+            </Container>
           </Box>
         </Box>
       </Router>
