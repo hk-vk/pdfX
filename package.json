@@ -29,6 +29,7 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.0.375",
     "postcss": "^8.5.3",
+    "qpdf.js": "^2.0.0",
     "react": "^19.0.0",
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^19.0.0",

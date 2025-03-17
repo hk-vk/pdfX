@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
+import React, { useState, useCallback, useEffect } from 'react';
+import QPDF from 'qpdf.js';
 import { 
   Box, 
   Typography, 
@@ -31,107 +31,81 @@ import { useDropzone } from 'react-dropzone';
 import { saveAs } from 'file-saver';
 import PageHeader from './PageHeader';
 
-// Pure client-side PDF encryption implementation from scratch
-const encryptPDF = async (pdfBytes: ArrayBuffer, userPassword: string, ownerPassword: string) => {
-  // Load the PDF document
-  const pdfDoc = await PDFDocument.load(pdfBytes);
-  
-  // Get all pages
-  const pages = pdfDoc.getPages();
-  
-  // Add a security notice watermark to all pages
-  for (let i = 0; i < pages.length; i++) {
-    const page = pages[i];
-    const { width, height } = page.getSize();
-    
-    // Add watermark at the center
-    page.drawText('PASSWORD PROTECTED', {
-      x: width / 2 - 150,
-      y: height / 2,
-      size: 36,
-      color: rgb(0.85, 0.85, 0.85),
-      opacity: 0.3,
-      rotate: degrees(-45),
-    });
-    
-    // Add password info at bottom (not visible in final document)
-    const passwordInfo = `Protected by User: ${userPassword}, Owner: ${ownerPassword}`;
-    page.drawText(passwordInfo, {
-      x: 20,
-      y: 20,
-      size: 0.5, // Very small, practically invisible
-      color: rgb(1, 1, 1),
-      opacity: 0.01,
-    });
-  }
-  
-  // Add metadata to record protection status
-  pdfDoc.setTitle(`Protected: ${pdfDoc.getTitle() || 'Document'}`);
-  pdfDoc.setSubject('This document is password protected');
-  pdfDoc.setProducer('PDF Toolkit - Password Protection');
-  pdfDoc.setCreator('PDF Toolkit');
-  
-  // Store password information in metadata as keywords
-  // setKeywords expects a string array
-  pdfDoc.setKeywords([
-    'pdf-toolkit:protected=true',
-    `pdf-toolkit:owner-hash=${btoa(ownerPassword)}`, 
-    `pdf-toolkit:user-hash=${btoa(userPassword)}`
-  ]);
-  
-  // Save the PDF with the simulated protection
-  const protectedBytes = await pdfDoc.save();
-  
-  return protectedBytes;
+// Permission flags mapping
+const USER_PROTECTION_FLAGS = {
+  // 0: Allow all operations
+  // 4: Disallow modification except by signing
+  // 8: Disallow modification of form fields
+  // 12: Disallow content extraction
+  // 16: Disallow content extraction and accessibility
+  // 20: Disallow form filling and signing
+  // 28: Disallow everything except reading
+  'none': 0,
+  'noModify': 4,
+  'noForms': 8,
+  'noExtract': 12,
+  'noExtractAccess': 16, 
+  'noFillForms': 20,
+  'noAll': 28
 };
 
-// Implementation of a custom PDF validator with password check
-const createProtectedPDFViewer = () => {
-  // Create an in-memory validation function
-  return {
-    async validate(pdfBytes: ArrayBuffer, password: string): Promise<boolean> {
-      try {
-        // Load the PDF
-        const pdfDoc = await PDFDocument.load(pdfBytes);
-        
-        // Get the keywords field where we stored our protection info
-        const keywords = pdfDoc.getKeywords();
-        const keywordsStr = Array.isArray(keywords) ? keywords.join(' ') : (keywords || '');
-        
-        // Check if it has our protection marker
-        const isProtected = keywordsStr.includes('pdf-toolkit:protected=true');
-        
-        if (!isProtected) {
-          return true; // Not protected, so validation passes
+// Map permission flags to protection level value
+const mapPermissionsToProtectionFlag = (permissions: any) => {
+  if (permissions.printing && permissions.modifying && permissions.copying && 
+      permissions.annotating && permissions.fillingForms && 
+      permissions.contentAccessibility && permissions.documentAssembly) {
+    return USER_PROTECTION_FLAGS.none;
+  }
+  
+  if (!permissions.printing && !permissions.modifying && !permissions.copying && 
+      !permissions.annotating && !permissions.fillingForms && 
+      !permissions.contentAccessibility && !permissions.documentAssembly) {
+    return USER_PROTECTION_FLAGS.noAll;
+  }
+  
+  if (!permissions.modifying) {
+    return USER_PROTECTION_FLAGS.noModify;
+  }
+  
+  if (!permissions.copying) {
+    return USER_PROTECTION_FLAGS.noExtract;
+  }
+  
+  if (!permissions.fillingForms) {
+    return USER_PROTECTION_FLAGS.noFillForms;
+  }
+  
+  // Default to a reasonable restriction level
+  return USER_PROTECTION_FLAGS.noModify;
+};
+
+// Real PDF encryption using QPDF.js
+const encryptPDF = (pdfBytes: ArrayBuffer, userPassword: string, ownerPassword: string, permissionFlags: any): Promise<ArrayBuffer> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const protectionFlag = mapPermissionsToProtectionFlag(permissionFlags);
+      
+      // Use QPDF.js to encrypt the PDF
+      QPDF.encrypt({
+        arrayBuffer: pdfBytes,
+        userPassword: userPassword,
+        ownerPassword: ownerPassword,
+        keyLength: 256, // Use highest encryption level
+        userProtectionFlag: protectionFlag,
+        callback: (err: Error | null, encryptedBuffer: ArrayBuffer) => {
+          if (err) {
+            console.error('QPDF encryption error:', err);
+            reject(err);
+          } else {
+            resolve(encryptedBuffer);
+          }
         }
-        
-        // Extract password hashes from keywords
-        const ownerHashMatch = keywordsStr.match(/pdf-toolkit:owner-hash=([^ ]+)/);
-        const userHashMatch = keywordsStr.match(/pdf-toolkit:user-hash=([^ ]+)/);
-        
-        const ownerPasswordHash = ownerHashMatch ? ownerHashMatch[1] : '';
-        const userPasswordHash = userHashMatch ? userHashMatch[1] : '';
-        
-        // Check if the provided password matches either hash
-        const passwordHash = btoa(password);
-        
-        return passwordHash === ownerPasswordHash || passwordHash === userPasswordHash;
-      } catch (error) {
-        console.error('PDF validation error:', error);
-        return false;
-      }
-    },
-    
-    async open(pdfBytes: ArrayBuffer, password: string): Promise<ArrayBuffer | null> {
-      const isValid = await this.validate(pdfBytes, password);
-      
-      if (isValid) {
-        return pdfBytes;
-      }
-      
-      return null;
+      });
+    } catch (error) {
+      console.error('Error during encryption setup:', error);
+      reject(error);
     }
-  };
+  });
 };
 
 const PDFPassword: React.FC = () => {
@@ -145,6 +119,7 @@ const PDFPassword: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [qpdfInitialized, setQpdfInitialized] = useState(false);
   const [permissionFlags, setPermissionFlags] = useState({
     printing: true,
     modifying: true,
@@ -155,17 +130,45 @@ const PDFPassword: React.FC = () => {
     documentAssembly: true,
   });
   
-  // PDF Validator reference
-  const pdfValidatorRef = useRef(createProtectedPDFViewer());
+  // Initialize QPDF
+  useEffect(() => {
+    // Set path to qpdf-worker.js
+    QPDF.path = '/';
+    
+    // Create a test function to check if QPDF is initialized correctly
+    const testQPDF = () => {
+      try {
+        // Simple test to see if QPDF is available
+        if (typeof QPDF.encrypt === 'function') {
+          setQpdfInitialized(true);
+        } else {
+          console.error('QPDF.encrypt is not a function');
+          setError('PDF encryption library failed to initialize. Please try again later.');
+        }
+      } catch (e) {
+        console.error('QPDF initialization error:', e);
+        setError('Failed to initialize PDF encryption library.');
+      }
+    };
+    
+    // Run test after a short delay to ensure QPDF has time to load
+    const timer = setTimeout(() => {
+      testQPDF();
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
 
     try {
-      // Validate it's a PDF
-      const arrayBuffer = await file.arrayBuffer();
-      await PDFDocument.load(arrayBuffer);
+      // Validate it's a PDF by checking MIME type and extension
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        throw new Error('Selected file is not a PDF');
+      }
+      
       setFile(file);
       setError(null);
     } catch (error) {
@@ -219,6 +222,11 @@ const PDFPassword: React.FC = () => {
       setError('Please enter a user password or uncheck the "Add user password" option');
       return;
     }
+    
+    if (!qpdfInitialized) {
+      setError('PDF encryption library is not initialized. Please try again later.');
+      return;
+    }
 
     setProcessing(true);
     setProgress(0);
@@ -230,17 +238,21 @@ const PDFPassword: React.FC = () => {
       const arrayBuffer = await file.arrayBuffer();
       setProgress(20);
       
-      // Apply client-side protection
-      const protectedPdfBytes = await encryptPDF(
+      // Set the user password (if not using separate user password, use owner password for both)
+      const effectiveUserPassword = useUserPassword ? userPassword : ownerPassword;
+      
+      // Apply real PDF encryption
+      const encryptedPdfBytes = await encryptPDF(
         arrayBuffer,
-        useUserPassword ? userPassword : ownerPassword,
-        ownerPassword
+        effectiveUserPassword,
+        ownerPassword,
+        permissionFlags
       );
       
       setProgress(70);
 
-      // Create a Blob from the protected PDF bytes
-      const blob = new Blob([protectedPdfBytes], { type: 'application/pdf' });
+      // Create a Blob from the encrypted PDF bytes
+      const blob = new Blob([encryptedPdfBytes], { type: 'application/pdf' });
       
       // Create download filename
       const fileName = file.name.replace('.pdf', '') || 'document';
@@ -248,16 +260,9 @@ const PDFPassword: React.FC = () => {
       
       setProgress(100);
       setSuccess(true);
-      
-      // Display a notice about the protection limitations
-      setError(
-        'Note: This PDF has simulated password protection using visual watermarks and metadata. ' +
-        'The document is not cryptographically secured but requires a password in our viewer. ' +
-        'For stronger protection, consider server-side solutions.'
-      );
     } catch (error) {
       console.error('PDF protection error:', error);
-      setError(`Failed to protect PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(`Failed to encrypt PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setProcessing(false);
     }
@@ -267,33 +272,11 @@ const PDFPassword: React.FC = () => {
     setSuccess(false);
   };
 
-  // Test password validation
-  const testProtection = async () => {
-    if (!file) return;
-    
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      
-      // Apply protection
-      const protectedPdfBytes = await encryptPDF(arrayBuffer, userPassword || ownerPassword, ownerPassword);
-      
-      // Test with correct password
-      const validationResult = await pdfValidatorRef.current.validate(protectedPdfBytes, ownerPassword);
-      console.log('Validation with correct password:', validationResult);
-      
-      // Test with incorrect password
-      const invalidResult = await pdfValidatorRef.current.validate(protectedPdfBytes, 'wrong-password');
-      console.log('Validation with incorrect password:', invalidResult);
-    } catch (error) {
-      console.error('Test protection error:', error);
-    }
-  };
-
   return (
     <Box>
       <PageHeader
         title="Password Protect PDF"
-        description="Add password protection to your PDF files. Set owner and user passwords with custom permissions."
+        description="Add secure password protection to your PDF files with 256-bit AES encryption."
         icon={<LockIcon sx={{ fontSize: 32 }} />}
       />
 
@@ -396,7 +379,7 @@ const PDFPassword: React.FC = () => {
                       }
                       label={
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Typography variant="body2">Add user password</Typography>
+                          <Typography variant="body2">Add separate user password</Typography>
                           <Tooltip title="When selected, document can be opened with this password but will have restricted permissions">
                             <InfoIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary', fontSize: 16 }} />
                           </Tooltip>
@@ -518,7 +501,7 @@ const PDFPassword: React.FC = () => {
                   <Button
                     variant="contained"
                     onClick={protectPDF}
-                    disabled={processing || !file || !ownerPassword || (useUserPassword && !userPassword)}
+                    disabled={processing || !file || !ownerPassword || (useUserPassword && !userPassword) || !qpdfInitialized}
                     startIcon={<LockIcon />}
                     sx={{
                       mt: 2,
@@ -544,7 +527,7 @@ const PDFPassword: React.FC = () => {
                     mb: 1
                   }}>
                     <Typography variant="body2" color="text.secondary">
-                      Protecting PDF...
+                      Encrypting PDF...
                     </Typography>
                     <Typography variant="body2" color="primary" fontWeight={500}>
                       {Math.round(progress)}%
@@ -567,7 +550,7 @@ const PDFPassword: React.FC = () => {
 
         {error && (
           <Alert 
-            severity="warning" 
+            severity="error" 
             sx={{ mt: 2 }}
             icon={<ErrorOutlineIcon />}
           >
@@ -587,7 +570,7 @@ const PDFPassword: React.FC = () => {
             variant="filled"
             sx={{ width: '100%' }}
           >
-            PDF successfully protected and downloaded!
+            PDF successfully encrypted and downloaded!
           </Alert>
         </Snackbar>
       </Paper>
