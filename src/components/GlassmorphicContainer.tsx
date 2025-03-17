@@ -1,89 +1,69 @@
 import React from 'react';
-import { Box, BoxProps, useTheme, alpha } from '@mui/material';
-import { motion, MotionProps } from 'framer-motion';
+import { Box, useTheme, BoxProps } from '@mui/material';
 
 interface GlassmorphicContainerProps extends BoxProps {
-  blurStrength?: number;
-  borderOpacity?: number;
-  backgroundOpacity?: number;
-  hoverEffect?: boolean;
-  motionProps?: MotionProps;
+  variant?: 'default' | 'hover' | 'gradient' | 'accent' | 'card' | 'floating';
 }
 
 const GlassmorphicContainer: React.FC<GlassmorphicContainerProps> = ({
   children,
-  blurStrength = 8,
-  borderOpacity = 0.1,
-  backgroundOpacity = 0.1,
-  hoverEffect = false,
-  motionProps,
+  variant = 'default',
   sx,
   ...props
 }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
-
-  const baseStyles = {
-    position: 'relative',
-    background: isDarkMode
-      ? alpha(theme.palette.background.paper, backgroundOpacity)
-      : alpha(theme.palette.background.paper, backgroundOpacity),
-    backdropFilter: `blur(${blurStrength}px)`,
-    WebkitBackdropFilter: `blur(${blurStrength}px)`,
-    border: '1px solid',
-    borderColor: isDarkMode
-      ? alpha(theme.palette.common.white, borderOpacity)
-      : alpha(theme.palette.common.black, borderOpacity),
-    transition: 'all 0.3s ease',
-    '&::before': {
-      content: '""',
-      position: 'absolute',
-      inset: 0,
-      borderRadius: 'inherit',
-      padding: '1px',
-      background: `linear-gradient(135deg, ${
-        isDarkMode
-          ? alpha(theme.palette.primary.main, 0.2)
-          : alpha(theme.palette.primary.main, 0.1)
-      }, transparent)`,
-      WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-      WebkitMaskComposite: 'xor',
-      maskComposite: 'exclude',
-      pointerEvents: 'none',
-    },
-    ...(hoverEffect && {
-      '&:hover': {
-        transform: 'translateY(-2px)',
-        boxShadow: `0 8px 20px ${
-          isDarkMode
-            ? alpha(theme.palette.common.black, 0.3)
-            : alpha(theme.palette.primary.main, 0.15)
-        }`,
-        borderColor: isDarkMode
-          ? alpha(theme.palette.common.white, borderOpacity * 2)
-          : alpha(theme.palette.common.black, borderOpacity * 2),
-        '&::before': {
-          background: `linear-gradient(135deg, ${
-            isDarkMode
-              ? alpha(theme.palette.primary.main, 0.3)
-              : alpha(theme.palette.primary.main, 0.2)
-          }, transparent)`,
-        },
-      },
-    }),
-    ...sx,
-  };
-
-  const Container = motionProps ? motion(Box) : Box;
-
+  
   return (
-    <Container
+    <Box
       {...props}
-      {...(motionProps || {})}
-      sx={baseStyles}
+      sx={{
+        position: 'relative',
+        background: isDarkMode 
+          ? 'rgba(31, 31, 31, 0.7)' 
+          : 'rgba(255, 255, 255, 0.7)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        border: '1px solid',
+        borderColor: 'divider',
+        transition: 'all 0.3s ease',
+        ...(variant === 'hover' && {
+          '&:hover': {
+            transform: 'translateY(-4px)',
+            boxShadow: 4,
+            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
+          }
+        }),
+        ...(variant === 'gradient' && {
+          background: isDarkMode 
+            ? 'linear-gradient(135deg, rgba(31, 31, 31, 0.8) 0%, rgba(41, 41, 41, 0.8) 100%)' 
+            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(240, 240, 240, 0.8) 100%)',
+          borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+        }),
+        ...(variant === 'accent' && {
+          borderLeft: '4px solid',
+          borderLeftColor: 'primary.main',
+        }),
+        ...(variant === 'card' && {
+          borderRadius: 2,
+          boxShadow: 1,
+          '&:hover': {
+            boxShadow: 2,
+          }
+        }),
+        ...(variant === 'floating' && {
+          boxShadow: 2,
+          border: 'none',
+          '&:hover': {
+            boxShadow: 4,
+            transform: 'translateY(-4px)',
+          }
+        }),
+        ...sx
+      }}
     >
       {children}
-    </Container>
+    </Box>
   );
 };
 
