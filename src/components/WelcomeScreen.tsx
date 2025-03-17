@@ -133,34 +133,13 @@ const WelcomeScreen: React.FC = () => {
           alignItems: 'center'
         }}
       >
-        <Logo />
-        <Typography 
-          variant="h3" 
-          component="h1" 
-          gutterBottom
-          sx={{ 
-            mt: 2,
-            fontWeight: 800,
-            fontFamily: "'Montserrat', sans-serif",
-            fontSize: { xs: '2.5rem', sm: '3.5rem' },
-            background: theme.palette.mode === 'dark' 
-              ? 'linear-gradient(135deg, #8a7fbd 0%, #cd6f47 100%)' 
-              : 'linear-gradient(135deg, #6c5dac 0%, #b05730 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            textFillColor: 'transparent',
-            letterSpacing: '-2px',
-            textTransform: 'uppercase'
-          }}
-        >
-          pdfX
-        </Typography>
+        <Logo size="large" />
         <Typography 
           variant="h6" 
           color="text.secondary" 
           sx={{ 
             maxWidth: '600px',
+            mt: 3,
             mb: 2,
             fontFamily: "'Montserrat', sans-serif",
             fontWeight: 500

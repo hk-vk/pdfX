@@ -159,7 +159,7 @@ const App: React.FC = () => {
                   color: 'text.primary'
                 }}
               >
-                <Logo />
+                <Logo size="small" />
               </Box>
               
               <Box sx={{ display: { xs: 'none', md: 'flex' }, ml: 4 }}>
