@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import QPDF from 'qpdf.js';
+import createModule from '@neslinesli93/qpdf-wasm';
 import { 
   Box, 
   Typography, 
@@ -31,81 +31,107 @@ import { useDropzone } from 'react-dropzone';
 import { saveAs } from 'file-saver';
 import PageHeader from './PageHeader';
 
-// Permission flags mapping
-const USER_PROTECTION_FLAGS = {
-  // 0: Allow all operations
-  // 4: Disallow modification except by signing
-  // 8: Disallow modification of form fields
-  // 12: Disallow content extraction
-  // 16: Disallow content extraction and accessibility
-  // 20: Disallow form filling and signing
-  // 28: Disallow everything except reading
-  'none': 0,
-  'noModify': 4,
-  'noForms': 8,
-  'noExtract': 12,
-  'noExtractAccess': 16, 
-  'noFillForms': 20,
-  'noAll': 28
+// Constants for file paths in the virtual file system
+const INPUT_FILE = '/input.pdf';
+const OUTPUT_FILE = '/encrypted.pdf';
+const INPUT_FOLDER = '/input';
+const OUTPUT_FOLDER = '/output';
+
+// Map permission flags to qpdf command arguments
+const mapPermissionsToArgs = (permissionFlags: any, userPassword: string, ownerPassword: string) => {
+  // Base arguments for encryption
+  const args = [
+    INPUT_FILE,
+    '--encrypt',
+    userPassword,
+    ownerPassword,
+    '256', // Use 256-bit encryption
+    '--'
+  ];
+
+  // Add permissions
+  if (!permissionFlags.printing) {
+    args.push('--print=none');
+  }
+  
+  if (!permissionFlags.modifying) {
+    args.push('--modify=none');
+  }
+  
+  if (!permissionFlags.copying) {
+    args.push('--extract=n');
+  }
+  
+  if (!permissionFlags.annotating) {
+    args.push('--annotate=n');
+  }
+  
+  if (!permissionFlags.fillingForms) {
+    args.push('--form=n');
+  }
+  
+  if (!permissionFlags.contentAccessibility) {
+    args.push('--accessibility=n');
+  }
+  
+  if (!permissionFlags.documentAssembly) {
+    args.push('--assemble=n');
+  }
+  
+  // Output file path
+  args.push(OUTPUT_FILE);
+  
+  return args;
 };
 
-// Map permission flags to protection level value
-const mapPermissionsToProtectionFlag = (permissions: any) => {
-  if (permissions.printing && permissions.modifying && permissions.copying && 
-      permissions.annotating && permissions.fillingForms && 
-      permissions.contentAccessibility && permissions.documentAssembly) {
-    return USER_PROTECTION_FLAGS.none;
-  }
-  
-  if (!permissions.printing && !permissions.modifying && !permissions.copying && 
-      !permissions.annotating && !permissions.fillingForms && 
-      !permissions.contentAccessibility && !permissions.documentAssembly) {
-    return USER_PROTECTION_FLAGS.noAll;
-  }
-  
-  if (!permissions.modifying) {
-    return USER_PROTECTION_FLAGS.noModify;
-  }
-  
-  if (!permissions.copying) {
-    return USER_PROTECTION_FLAGS.noExtract;
-  }
-  
-  if (!permissions.fillingForms) {
-    return USER_PROTECTION_FLAGS.noFillForms;
-  }
-  
-  // Default to a reasonable restriction level
-  return USER_PROTECTION_FLAGS.noModify;
-};
-
-// Real PDF encryption using QPDF.js
-const encryptPDF = (pdfBytes: ArrayBuffer, userPassword: string, ownerPassword: string, permissionFlags: any): Promise<ArrayBuffer> => {
-  return new Promise((resolve, reject) => {
-    try {
-      const protectionFlag = mapPermissionsToProtectionFlag(permissionFlags);
-      
-      // Use QPDF.js to encrypt the PDF
-      QPDF.encrypt({
-        arrayBuffer: pdfBytes,
-        userPassword: userPassword,
-        ownerPassword: ownerPassword,
-        keyLength: 256, // Use highest encryption level
-        userProtectionFlag: protectionFlag,
-        callback: (err: Error | null, encryptedBuffer: ArrayBuffer) => {
-          if (err) {
-            console.error('QPDF encryption error:', err);
-            reject(err);
-          } else {
-            resolve(encryptedBuffer);
+// Function to encrypt PDF using qpdf-wasm
+const encryptPDF = async (pdfBytes: ArrayBuffer, userPassword: string, ownerPassword: string, permissionFlags: any): Promise<ArrayBuffer> => {
+  try {
+    // Initialize qpdf-wasm
+    const qpdf = await createModule({
+      locateFile: () => '/qpdf.wasm',
+      noInitialRun: true,
+      preRun: [
+        (module: any) => {
+          // Create directories in the virtual file system
+          if (module.FS) {
+            try {
+              module.FS.mkdir(INPUT_FOLDER);
+              module.FS.mkdir(OUTPUT_FOLDER);
+            } catch (e) {
+              console.warn("Error creating directories:", e);
+            }
           }
-        }
-      });
-    } catch (error) {
-      console.error('Error during encryption setup:', error);
-      reject(error);
+        },
+      ],
+    });
+    
+    // Write the PDF to the virtual file system
+    const uint8Array = new Uint8Array(pdfBytes);
+    qpdf.FS.writeFile(INPUT_FILE, uint8Array);
+    
+    // Prepare command arguments
+    const args = mapPermissionsToArgs(permissionFlags, userPassword, ownerPassword);
+    
+    // Execute the encryption command
+    qpdf.callMain(args);
+    
+    // Read the encrypted file from the virtual file system
+    const encryptedData = qpdf.FS.readFile(OUTPUT_FILE);
+    
+    // Clean up
+    try {
+      qpdf.FS.unlink(INPUT_FILE);
+      qpdf.FS.unlink(OUTPUT_FILE);
+    } catch (e) {
+      console.warn('Error cleaning up files:', e);
     }
-  });
+    
+    return encryptedData.buffer;
+  } catch (error) {
+    console.error('Error encrypting PDF:', error);
+    throw error;
+  }
 };
 
 const PDFPassword: React.FC = () => {
@@ -130,33 +156,23 @@ const PDFPassword: React.FC = () => {
     documentAssembly: true,
   });
   
-  // Initialize QPDF
+  // Initialize qpdf-wasm
   useEffect(() => {
-    // Set path to qpdf-worker.js
-    QPDF.path = '/';
-    
-    // Create a test function to check if QPDF is initialized correctly
-    const testQPDF = () => {
+    const initQpdf = async () => {
       try {
-        // Simple test to see if QPDF is available
-        if (typeof QPDF.encrypt === 'function') {
-          setQpdfInitialized(true);
-        } else {
-          console.error('QPDF.encrypt is not a function');
-          setError('PDF encryption library failed to initialize. Please try again later.');
-        }
-      } catch (e) {
-        console.error('QPDF initialization error:', e);
-        setError('Failed to initialize PDF encryption library.');
+        // Test if we can load qpdf-wasm
+        await createModule({
+          locateFile: () => '/qpdf.wasm',
+          noInitialRun: true
+        });
+        setQpdfInitialized(true);
+      } catch (err) {
+        console.error('Failed to initialize qpdf-wasm:', err);
+        setError('PDF encryption library failed to initialize. Please try again later.');
       }
     };
     
-    // Run test after a short delay to ensure QPDF has time to load
-    const timer = setTimeout(() => {
-      testQPDF();
-    }, 1000);
-    
-    return () => clearTimeout(timer);
+    initQpdf();
   }, []);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -242,6 +258,7 @@ const PDFPassword: React.FC = () => {
       const effectiveUserPassword = useUserPassword ? userPassword : ownerPassword;
       
       // Apply real PDF encryption
+      setProgress(40);
       const encryptedPdfBytes = await encryptPDF(
         arrayBuffer,
         effectiveUserPassword,
@@ -249,7 +266,7 @@ const PDFPassword: React.FC = () => {
         permissionFlags
       );
       
-      setProgress(70);
+      setProgress(80);
 
       // Create a Blob from the encrypted PDF bytes
       const blob = new Blob([encryptedPdfBytes], { type: 'application/pdf' });

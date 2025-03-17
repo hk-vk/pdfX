@@ -1,21 +1,23 @@
-declare module 'qpdf.js' {
-  interface EncryptOptions {
-    arrayBuffer: ArrayBuffer;
-    userPassword: string;
-    ownerPassword: string;
-    keyLength?: 40 | 128 | 256;
-    userProtectionFlag?: number;
-    callback: (err: Error | null, encryptedBuffer: ArrayBuffer) => void;
-  }
+interface EncryptOptions {
+  arrayBuffer: ArrayBuffer;
+  userPassword: string;
+  ownerPassword: string;
+  keyLength?: 40 | 128 | 256;
+  userProtectionFlag?: number;
+  callback: (err: Error | null, encryptedBuffer: ArrayBuffer) => void;
+}
 
-  interface QPDF {
-    path: string;
-    encrypt: (options: EncryptOptions) => void;
-    base64ToArrayBuffer: (base64: string) => ArrayBuffer;
-    arrayBufferToBase64: (arrayBuffer: ArrayBuffer) => string;
-  }
+interface QPDF {
+  path?: string;
+  encrypt: (options: EncryptOptions) => void;
+  arrayBufferToBase64: (buffer: ArrayBuffer) => string;
+  base64ToArrayBuffer: (base64: string) => ArrayBuffer;
+}
 
-  const QPDF: QPDF;
-  
-  export default QPDF;
-} 
+declare global {
+  interface Window {
+    QPDF: QPDF;
+  }
+}
+
+export {}; 
