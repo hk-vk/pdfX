@@ -1,234 +1,129 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
-  Box, 
-  Container, 
-  CssBaseline, 
   ThemeProvider, 
-  createTheme, 
+  CssBaseline, 
+  Box, 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  IconButton, 
   useMediaQuery,
-  Typography,
-  IconButton,
-  Tabs,
-  Tab,
-  AppBar,
-  Toolbar,
   Drawer,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
   Divider,
-  useTheme,
+  Container,
+  useTheme
 } from '@mui/material';
-import { 
-  Brightness4 as DarkModeIcon, 
-  Brightness7 as LightModeIcon,
+import {
   Menu as MenuIcon,
+  Brightness4 as DarkIcon,
+  Brightness7 as LightIcon,
+  Home as HomeIcon,
   MergeType as MergeIcon,
   ContentCut as SplitIcon,
   Compress as CompressIcon,
-  Image as ImageIcon,
-  Home as HomeIcon,
+  Image as ImageIcon
 } from '@mui/icons-material';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import PDFMerger from "./components/PDFMerger";
-import PDFSplitter from "./components/PDFSplitter";
-import PDFCompressor from "./components/PDFCompressor";
-import PDFToImages from "./components/PDFToImages";
-import Logo from "./components/Logo";
-import ThemeToggle from "./components/ThemeToggle";
-import GlassmorphicContainer from "./components/GlassmorphicContainer";
-import WelcomeScreen from "./components/WelcomeScreen";
+import { motion, AnimatePresence } from 'framer-motion';
+import { lightTheme, darkTheme } from './theme';
+import WelcomeScreen from './components/WelcomeScreen';
+import PDFMerger from './components/PDFMerger';
+import PDFSplitter from './components/PDFSplitter';
+import PDFCompressor from './components/PDFCompressor';
+import PDFToImages from './components/PDFToImages';
+import Logo from './components/Logo';
 
-const MotionBox = motion(Box);
+// Create motion components
+const MotionContainer = motion(Container);
 
-function App() {
+// Wrapper component for page transitions
+const PageTransition = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  
+  return (
+    <AnimatePresence mode="wait">
+      <MotionContainer
+        key={location.pathname}
+        maxWidth="xl"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.3 }}
+        sx={{ 
+          pt: { xs: 2, sm: 3 },
+          pb: { xs: 4, sm: 6 },
+          minHeight: 'calc(100vh - 140px)' // Account for header and footer
+        }}
+      >
+        {children}
+      </MotionContainer>
+    </AnimatePresence>
+  );
+};
+
+const App: React.FC = () => {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
-  const [mode, setMode] = useState<'light' | 'dark'>(prefersDarkMode ? 'dark' : 'light');
+  const [darkMode, setDarkMode] = useState(prefersDarkMode);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  
+  useEffect(() => {
+    setDarkMode(prefersDarkMode);
+  }, [prefersDarkMode]);
 
+  const theme = darkMode ? darkTheme : lightTheme;
+  
   const toggleDrawer = () => {
     setDrawerOpen(!drawerOpen);
   };
 
-  const toggleColorMode = () => {
-    setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
   };
 
-  // Define color palettes
-  const lightPalette = {
-    primary: {
-      main: '#4361ee',
-      light: '#738eef',
-      dark: '#3a0ca3',
-      contrastText: '#ffffff',
-    },
-    secondary: {
-      main: '#7209b7',
-      light: '#9d4eca',
-      dark: '#560a86',
-      contrastText: '#ffffff',
-    },
-    background: {
-      default: '#f8fafc',
-      paper: '#ffffff',
-    },
-    text: {
-      primary: '#1e293b',
-      secondary: '#64748b',
-    },
-    error: {
-      main: '#ef4444',
-    },
-    warning: {
-      main: '#f59e0b',
-    },
-    info: {
-      main: '#3b82f6',
-    },
-    success: {
-      main: '#10b981',
-    },
-  };
-
-  const darkPalette = {
-    primary: {
-      main: '#4361ee',
-      light: '#738eef',
-      dark: '#3a0ca3',
-      contrastText: '#ffffff',
-    },
-    secondary: {
-      main: '#9d4eca',
-      light: '#c77fde',
-      dark: '#7209b7',
-      contrastText: '#ffffff',
-    },
-    background: {
-      default: '#0f172a',
-      paper: '#1e293b',
-    },
-    text: {
-      primary: '#f1f5f9',
-      secondary: '#94a3b8',
-    },
-    error: {
-      main: '#f87171',
-    },
-    warning: {
-      main: '#fbbf24',
-    },
-    info: {
-      main: '#60a5fa',
-    },
-    success: {
-      main: '#34d399',
-    },
-  };
-
-  // Create theme
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode,
-          ...(mode === 'light' ? lightPalette : darkPalette),
-        },
-        typography: {
-          fontFamily: '"Geist Sans", "Plus Jakarta Sans", "Inter", sans-serif',
-          h1: {
-            fontWeight: 800,
-          },
-          h2: {
-            fontWeight: 700,
-          },
-          h3: {
-            fontWeight: 700,
-          },
-          h4: {
-            fontWeight: 600,
-          },
-          h5: {
-            fontWeight: 600,
-          },
-          h6: {
-            fontWeight: 600,
-          },
-          button: {
-            fontWeight: 600,
-            textTransform: 'none',
-          },
-        },
-        shape: {
-          borderRadius: 12,
-        },
-        components: {
-          MuiButton: {
-            styleOverrides: {
-              root: {
-                borderRadius: 8,
-                boxShadow: 'none',
-                textTransform: 'none',
-                fontWeight: 600,
-                padding: '8px 16px',
-              },
-              contained: {
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                '&:hover': {
-                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                },
-              },
-            },
-          },
-          MuiPaper: {
-            styleOverrides: {
-              root: {
-                backgroundImage: 'none',
-              },
-              rounded: {
-                borderRadius: 12,
-              },
-            },
-          },
-          MuiTab: {
-            styleOverrides: {
-              root: {
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.875rem',
-              },
-            },
-          },
-          MuiAppBar: {
-            styleOverrides: {
-              root: {
-                boxShadow: mode === 'light' 
-                  ? '0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1)' 
-                  : '0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3)',
-                backgroundImage: 'none',
-              },
-            },
-          },
-          MuiDrawer: {
-            styleOverrides: {
-              paper: {
-                backgroundImage: 'none',
-              },
-            },
-          },
-        },
-      }),
-    [mode]
-  );
-
-  const menuItems = [
+  const navItems = [
     { text: 'Home', icon: <HomeIcon />, path: '/' },
-    { text: 'Merge PDFs', icon: <MergeIcon />, path: '/merge' },
-    { text: 'Split PDF', icon: <SplitIcon />, path: '/split' },
-    { text: 'Compress PDF', icon: <CompressIcon />, path: '/compress' },
-    { text: 'PDF to Images', icon: <ImageIcon />, path: '/to-images' },
+    { text: 'Merge PDFs', icon: <MergeIcon />, path: '/merge-pdfs' },
+    { text: 'Split PDF', icon: <SplitIcon />, path: '/split-pdf' },
+    { text: 'Compress PDF', icon: <CompressIcon />, path: '/compress-pdf' },
+    { text: 'PDF to Images', icon: <ImageIcon />, path: '/pdf-to-images' }
   ];
+
+  const drawer = (
+    <Box sx={{ width: 250 }} role="presentation" onClick={toggleDrawer}>
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
+        <Logo height={32} width={32} />
+        <Typography variant="h6" sx={{ ml: 1, fontWeight: 600 }}>
+          PDF Toolkit
+        </Typography>
+      </Box>
+      <Divider />
+      <List>
+        {navItems.map((item) => (
+          <ListItem 
+            component={Link} 
+            to={item.path} 
+            key={item.text}
+            sx={{ 
+              color: 'text.primary',
+              textDecoration: 'none',
+              '&:hover': {
+                bgcolor: 'action.hover',
+              }
+            }}
+          >
+            <ListItemIcon sx={{ color: 'primary.main' }}>
+              {item.icon}
+            </ListItemIcon>
+            <ListItemText primary={item.text} />
+          </ListItem>
+        ))}
+      </List>
+    </Box>
+  );
 
   return (
     <ThemeProvider theme={theme}>
@@ -237,14 +132,13 @@ function App() {
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
           <AppBar 
             position="sticky" 
-            color="default" 
             elevation={0}
             sx={{ 
+              bgcolor: 'background.paper',
+              borderBottom: 1,
+              borderColor: 'divider',
               backdropFilter: 'blur(10px)',
-              backgroundColor: theme => theme.palette.mode === 'light' 
-                ? 'rgba(255, 255, 255, 0.8)' 
-                : 'rgba(30, 41, 59, 0.8)',
-              borderBottom: theme => `1px solid ${theme.palette.divider}`,
+              zIndex: (theme) => theme.zIndex.drawer + 1
             }}
           >
             <Toolbar>
@@ -253,7 +147,7 @@ function App() {
                 color="inherit"
                 aria-label="menu"
                 onClick={toggleDrawer}
-                sx={{ mr: 2, display: { sm: 'none' } }}
+                sx={{ mr: 2 }}
               >
                 <MenuIcon />
               </IconButton>
@@ -265,56 +159,54 @@ function App() {
                   display: 'flex', 
                   alignItems: 'center',
                   textDecoration: 'none',
-                  color: 'inherit',
+                  color: 'text.primary'
                 }}
               >
-                <Logo height={40} width={40} />
+                <Logo height={28} width={28} />
                 <Typography 
                   variant="h6" 
-                  component="div" 
                   sx={{ 
-                    ml: 1.5, 
+                    ml: 1,
                     fontWeight: 700,
-                    display: { xs: 'none', sm: 'block' },
-                    fontFamily: '"Geist Sans", sans-serif',
+                    display: { xs: 'none', sm: 'block' }
                   }}
                 >
-                  pdfX
+                  PDF Toolkit
                 </Typography>
               </Box>
               
-              <Box sx={{ display: { xs: 'none', sm: 'block' }, ml: 4, flexGrow: 1 }}>
-                <Tabs 
-                  value={false} 
-                  aria-label="navigation tabs"
-                  sx={{
-                    '& .MuiTab-root': {
-                      minWidth: 'auto',
-                      px: 2,
-                      fontFamily: '"Geist Sans", sans-serif',
-                    },
-                  }}
-                >
-                  {menuItems.map((item) => (
-                    <Tab
-                      key={item.path}
-                      label={item.text}
-                      component={Link}
-                      to={item.path}
-                      icon={item.icon}
-                      iconPosition="start"
-                    />
-                  ))}
-                </Tabs>
+              <Box sx={{ display: { xs: 'none', md: 'flex' }, ml: 4 }}>
+                {navItems.slice(1).map((item) => (
+                  <Box
+                    component={Link}
+                    to={item.path}
+                    key={item.text}
+                    sx={{
+                      mx: 1.5,
+                      py: 2,
+                      color: 'text.primary',
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      borderBottom: '2px solid transparent',
+                      '&:hover': {
+                        borderBottomColor: 'primary.main',
+                        color: 'primary.main'
+                      }
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {item.text}
+                    </Typography>
+                  </Box>
+                ))}
               </Box>
               
-              <Box sx={{ ml: 'auto' }}>
-                <ThemeToggle 
-                  isDarkMode={mode === 'dark'} 
-                  toggleColorMode={toggleColorMode}
-                  variant="fancy"
-                />
-              </Box>
+              <Box sx={{ flexGrow: 1 }} />
+              
+              <IconButton color="inherit" onClick={toggleDarkMode}>
+                {darkMode ? <LightIcon /> : <DarkIcon />}
+              </IconButton>
             </Toolbar>
           </AppBar>
           
@@ -322,61 +214,17 @@ function App() {
             anchor="left"
             open={drawerOpen}
             onClose={toggleDrawer}
-            sx={{
-              '& .MuiDrawer-paper': {
-                width: 280,
-                boxSizing: 'border-box',
-              },
-            }}
           >
-            <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
-              <Logo height={32} width={32} />
-              <Typography variant="h6" sx={{ ml: 1.5, fontWeight: 700, fontFamily: '"Geist Sans", sans-serif' }}>
-                pdfX
-              </Typography>
-            </Box>
-            <Divider />
-            <List>
-              {menuItems.map((item) => (
-                <ListItem 
-                  key={item.text} 
-                  component={Link} 
-                  to={item.path}
-                  onClick={toggleDrawer}
-                  sx={{
-                    borderRadius: 2,
-                    mx: 1,
-                    mb: 0.5,
-                    '&:hover': {
-                      bgcolor: theme => theme.palette.mode === 'light' 
-                        ? 'rgba(67, 97, 238, 0.08)' 
-                        : 'rgba(67, 97, 238, 0.15)',
-                    },
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 40 }}>
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={item.text} 
-                    primaryTypographyProps={{ 
-                      fontFamily: '"Geist Sans", sans-serif',
-                      fontWeight: 500,
-                    }} 
-                  />
-                </ListItem>
-              ))}
-            </List>
+            {drawer}
           </Drawer>
           
-          <Box component="main" sx={{ flexGrow: 1, py: 3, px: { xs: 2, sm: 3 } }}>
+          <Box component="main" sx={{ flexGrow: 1 }}>
             <Routes>
-              <Route path="/" element={<WelcomeScreen />} />
-              <Route path="/merge" element={<PDFMerger />} />
-              <Route path="/split" element={<PDFSplitter />} />
-              <Route path="/compress" element={<PDFCompressor />} />
-              <Route path="/to-images" element={<PDFToImages />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="/" element={<PageTransition><WelcomeScreen /></PageTransition>} />
+              <Route path="/merge-pdfs" element={<PageTransition><PDFMerger /></PageTransition>} />
+              <Route path="/split-pdf" element={<PageTransition><PDFSplitter /></PageTransition>} />
+              <Route path="/compress-pdf" element={<PageTransition><PDFCompressor /></PageTransition>} />
+              <Route path="/pdf-to-images" element={<PageTransition><PDFToImages /></PageTransition>} />
             </Routes>
           </Box>
           
@@ -386,18 +234,23 @@ function App() {
               py: 3, 
               px: 2, 
               mt: 'auto',
-              textAlign: 'center',
-              borderTop: theme => `1px solid ${theme.palette.divider}`,
+              backgroundColor: 'background.paper',
+              borderTop: 1,
+              borderColor: 'divider'
             }}
           >
-            <Typography variant="body2" color="text.secondary" sx={{ fontFamily: '"Geist Sans", sans-serif' }}>
-              © {new Date().getFullYear()} pdfX - All PDF processing happens in your browser for complete privacy
+            <Typography 
+              variant="body2" 
+              color="text.secondary" 
+              align="center"
+            >
+              © {new Date().getFullYear()} PDF Toolkit. All rights reserved.
             </Typography>
           </Box>
         </Box>
       </Router>
     </ThemeProvider>
   );
-}
+};
 
 export default App;

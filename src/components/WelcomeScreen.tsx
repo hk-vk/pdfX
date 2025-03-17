@@ -1,282 +1,189 @@
 import React from 'react';
-import { 
-  Box, 
-  Typography, 
-  Grid, 
-  Paper, 
-  useTheme, 
-  alpha,
-  Container,
-  Button
-} from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { Box, Typography, Grid, Paper, useTheme, useMediaQuery } from '@mui/material';
 import { motion } from 'framer-motion';
 import { 
-  MergeType as MergeIcon,
-  ContentCut as SplitIcon,
-  Compress as CompressIcon,
+  MergeType as MergeIcon, 
+  ContentCut as SplitIcon, 
+  Compress as CompressIcon, 
   Image as ImageIcon,
-  QuestionMark as QuestionIcon
+  ArrowForward as ArrowIcon
 } from '@mui/icons-material';
-import { Link } from 'react-router-dom';
-import GlassmorphicContainer from './GlassmorphicContainer';
+import Logo from './Logo';
 
 // Create motion components
-const MotionBox = motion(Box);
 const MotionPaper = motion(Paper);
 
 interface FeatureCardProps {
-  icon: React.ReactNode;
   title: string;
   description: string;
-  to: string;
-  delay: number;
+  icon: React.ReactNode;
+  path: string;
 }
 
-const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description, to, delay }) => {
+const FeatureCard: React.FC<FeatureCardProps> = ({ title, description, icon, path }) => {
+  const navigate = useNavigate();
   const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
-
+  
   return (
-    <Grid item xs={12} sm={6} md={3}>
-      <MotionBox
-        component={Link}
-        to={to}
-        sx={{ 
-          textDecoration: 'none',
-          display: 'block',
-          height: '100%'
-        }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ 
-          duration: 0.5,
-          delay: delay,
-          ease: [0.25, 0.1, 0.25, 1.0]
-        }}
-        whileHover={{ y: -5 }}
-      >
-        <GlassmorphicContainer
-          sx={{
-            p: 3,
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-            borderRadius: 3,
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              transform: 'translateY(-5px)',
-              borderColor: theme.palette.primary.main,
-            },
-          }}
-        >
-          <Box
-            sx={{
-              width: 60,
-              height: 60,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 2,
-              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.8)} 0%, ${alpha(theme.palette.primary.dark, 0.9)} 100%)`,
-              color: 'white',
-              boxShadow: `0 4px 14px ${alpha(theme.palette.primary.main, 0.4)}`,
-            }}
-          >
-            {icon}
-          </Box>
-          <Typography 
-            variant="h6" 
-            component="h3" 
-            gutterBottom
-            sx={{ 
-              fontWeight: 600,
-              fontFamily: '"Geist Sans", sans-serif',
-            }}
-          >
-            {title}
-          </Typography>
-          <Typography 
-            variant="body2" 
-            color="text.secondary"
-            sx={{ 
-              flex: 1,
-              fontFamily: '"Geist Sans", sans-serif',
-            }}
-          >
-            {description}
-          </Typography>
-        </GlassmorphicContainer>
-      </MotionBox>
-    </Grid>
+    <MotionPaper
+      elevation={0}
+      onClick={() => navigate(path)}
+      whileHover={{ 
+        y: -5,
+        boxShadow: theme.palette.mode === 'light' 
+          ? '0 10px 30px rgba(0, 0, 0, 0.1)' 
+          : '0 10px 30px rgba(0, 0, 0, 0.3)'
+      }}
+      whileTap={{ scale: 0.98 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      sx={{
+        p: 3,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        cursor: 'pointer',
+        borderRadius: 2,
+        border: `1px solid ${theme.palette.divider}`,
+        backgroundColor: theme.palette.mode === 'light' 
+          ? 'rgba(255, 255, 255, 0.8)' 
+          : 'rgba(31, 31, 31, 0.8)',
+        backdropFilter: 'blur(10px)',
+        transition: 'all 0.3s ease',
+        '&:hover': {
+          borderColor: theme.palette.primary.main,
+          '& .arrow-icon': {
+            transform: 'translateX(4px)',
+            opacity: 1,
+          }
+        }
+      }}
+    >
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        mb: 1.5,
+        color: theme.palette.primary.main
+      }}>
+        {icon}
+        <ArrowIcon 
+          className="arrow-icon" 
+          sx={{ 
+            ml: 'auto', 
+            opacity: 0.5,
+            transition: 'all 0.3s ease'
+          }} 
+        />
+      </Box>
+      <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
+        {title}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
+        {description}
+      </Typography>
+    </MotionPaper>
   );
 };
 
 const WelcomeScreen: React.FC = () => {
   const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
-
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const features = [
     {
+      title: 'Merge PDFs',
+      description: 'Combine multiple PDF files into a single document',
       icon: <MergeIcon fontSize="large" />,
-      title: "Merge PDFs",
-      description: "Combine multiple PDF files into a single document with drag-and-drop simplicity.",
-      to: "/merge",
-      delay: 0.1
+      path: '/merge-pdfs'
     },
     {
+      title: 'Split PDF',
+      description: 'Extract specific pages or split a PDF into multiple files',
       icon: <SplitIcon fontSize="large" />,
-      title: "Split PDF",
-      description: "Extract specific pages or split a PDF into multiple separate documents.",
-      to: "/split",
-      delay: 0.2
+      path: '/split-pdf'
     },
     {
+      title: 'Compress PDF',
+      description: 'Reduce PDF file size while maintaining quality',
       icon: <CompressIcon fontSize="large" />,
-      title: "Compress PDF",
-      description: "Reduce file size while maintaining quality for easier sharing and storage.",
-      to: "/compress",
-      delay: 0.3
+      path: '/compress-pdf'
     },
     {
+      title: 'PDF to Images',
+      description: 'Convert PDF pages to image formats like PNG or JPEG',
       icon: <ImageIcon fontSize="large" />,
-      title: "PDF to Images",
-      description: "Convert PDF pages to high-quality images in various formats and resolutions.",
-      to: "/to-images",
-      delay: 0.4
+      path: '/pdf-to-images'
     }
   ];
 
   return (
-    <Container maxWidth="lg" sx={{ py: 8 }}>
-      <MotionBox
-        sx={{ textAlign: 'center', mb: 8 }}
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+    <Box sx={{ 
+      maxWidth: '1200px', 
+      mx: 'auto', 
+      p: { xs: 2, sm: 3, md: 4 },
+    }}>
+      <Box 
+        sx={{ 
+          mb: 4, 
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
+        }}
       >
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            justifyContent: 'center',
-            alignItems: 'center',
-            mb: 2
-          }}
-        >
-          <Box
-            sx={{
-              width: 80,
-              height: 80,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.8)} 0%, ${alpha(theme.palette.primary.dark, 0.9)} 100%)`,
-              color: 'white',
-              boxShadow: `0 4px 20px ${alpha(theme.palette.primary.main, 0.5)}`,
-            }}
-          >
-            <QuestionIcon sx={{ fontSize: 40 }} />
-          </Box>
-        </Box>
-        
+        <Logo height={60} width={60} />
         <Typography 
-          variant="h2" 
+          variant="h3" 
           component="h1" 
           gutterBottom
           sx={{ 
+            mt: 2,
             fontWeight: 800,
-            fontFamily: '"Geist Sans", sans-serif',
-            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-            backgroundClip: 'text',
+            background: theme.palette.mode === 'dark' 
+              ? 'linear-gradient(90deg, #8a7fbd 0%, #6c5dac 100%)' 
+              : 'linear-gradient(90deg, #6c5dac 0%, #41376c 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            textFillColor: 'transparent'
+          }}
+        >
+          PDF Toolkit
+        </Typography>
+        <Typography 
+          variant="h6" 
+          color="text.secondary" 
+          sx={{ 
+            maxWidth: '600px',
             mb: 2
           }}
         >
-          What would you like to do?
+          Fast, secure PDF tools that work entirely in your browser
         </Typography>
-        
-        <Typography 
-          variant="h6" 
-          color="text.secondary"
-          sx={{ 
-            maxWidth: 600, 
-            mx: 'auto',
-            mb: 4,
-            fontFamily: '"Geist Sans", sans-serif',
-          }}
-        >
-          Select a tool below to get started with your PDF tasks.
-          All processing happens right in your browser for maximum privacy.
-        </Typography>
-      </MotionBox>
+      </Box>
+
+      <Typography 
+        variant="h5" 
+        component="h2" 
+        sx={{ 
+          mb: 3, 
+          fontWeight: 600,
+          textAlign: { xs: 'center', sm: 'left' }
+        }}
+      >
+        What would you like to do?
+      </Typography>
 
       <Grid container spacing={3}>
         {features.map((feature) => (
-          <FeatureCard
-            key={feature.title}
-            icon={feature.icon}
-            title={feature.title}
-            description={feature.description}
-            to={feature.to}
-            delay={feature.delay}
-          />
+          <Grid item xs={12} sm={6} md={3} key={feature.title}>
+            <FeatureCard {...feature} />
+          </Grid>
         ))}
       </Grid>
-
-      <MotionBox
-        sx={{ 
-          mt: 8, 
-          textAlign: 'center',
-          p: 4,
-          borderRadius: 4,
-          bgcolor: alpha(theme.palette.primary.main, isDarkMode ? 0.15 : 0.05),
-        }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.6 }}
-      >
-        <Typography 
-          variant="h6" 
-          gutterBottom
-          sx={{ 
-            fontWeight: 600,
-            fontFamily: '"Geist Sans", sans-serif',
-          }}
-        >
-          Need more advanced features?
-        </Typography>
-        <Typography 
-          variant="body1"
-          sx={{ 
-            mb: 3,
-            fontFamily: '"Geist Sans", sans-serif',
-          }}
-        >
-          We're constantly adding new tools to make your PDF workflow easier.
-        </Typography>
-        <Button 
-          variant="outlined" 
-          color="primary"
-          component="a"
-          href="https://github.com/hk-vk/pdfX"
-          target="_blank"
-          rel="noopener noreferrer"
-          sx={{
-            borderRadius: 2,
-            px: 3,
-            py: 1,
-            fontFamily: '"Geist Sans", sans-serif',
-          }}
-        >
-          Visit GitHub Repository
-        </Button>
-      </MotionBox>
-    </Container>
+    </Box>
   );
 };
 

@@ -1,30 +1,172 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-@import url('https://fonts.vercel.app/css?family=Geist+Sans:400,500,600,700,800&display=swap');
-@import url('https://fonts.vercel.app/css?family=Geist+Mono:400,500,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  font-family: 'Geist Sans', 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  line-height: 1.6;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+  /* Claude.ai inspired color palette */
+  --primary-color: #6c5dac; /* Claude purple */
+  --primary-light: #8a7fbd;
+  --primary-dark: #41376c;
+  
+  --secondary-color: #b05730; /* Claude orange/terracotta */
+  --secondary-light: #cd6f47;
+  --secondary-dark: #884325;
+  
+  --accent-color: #a69a64; /* Claude gold */
+  --accent-light: #b8af84;
+  --accent-dark: #887d4e;
+  
+  --neutral-100: #ffffff;
+  --neutral-200: #f8f9fa;
+  --neutral-300: #f0eee5; /* Claude cream */
+  --neutral-400: #e6e6e6;
+  --neutral-500: #a0a0a0;
+  --neutral-600: #6e6e6e;
+  --neutral-700: #3a3a3a;
+  --neutral-800: #1f1f1f;
+  --neutral-900: #121212;
+  
+  /* Background colors */
+  --bg-light: #f0eee5; /* Claude cream background */
+  --bg-dark: #121212; /* Dark mode background */
+  
+  /* Text colors */
+  --text-light: #ffffff;
+  --text-dark: #121212;
+  
+  /* Font families */
+  --font-primary: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-secondary: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', 'Fira Mono', 'Roboto Mono', monospace;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  
+  /* Border radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-full: 9999px;
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  overflow-x: hidden;
+/* Dark mode colors */
+[data-theme='dark'] {
+  --primary-color: #8a7fbd; /* Lighter purple for dark mode */
+  --primary-light: #a9a1ce;
+  --primary-dark: #6c5dac;
+  
+  --secondary-color: #cd6f47; /* Lighter orange for dark mode */
+  --secondary-light: #d88e6f;
+  --secondary-dark: #b05730;
+  
+  --accent-color: #b8af84; /* Lighter gold for dark mode */
+  --accent-light: #cbc4a4;
+  --accent-dark: #a69a64;
+  
+  --bg-light: #1f1f1f;
+  --bg-dark: #121212;
+  
+  --text-light: #f0eee5;
+  --text-dark: #e2e2e2;
 }
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  font-family: var(--font-primary);
+  background-color: var(--bg-light);
+  color: var(--text-dark);
+  line-height: 1.6;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body[data-theme='dark'] {
+  background-color: var(--bg-dark);
+  color: var(--text-light);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-primary);
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 1.75rem;
+}
+
+h4 {
+  font-size: 1.5rem;
+}
+
+h5 {
+  font-size: 1.25rem;
+}
+
+h6 {
+  font-size: 1rem;
+}
+
+p {
+  margin-bottom: 1rem;
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s ease-in-out;
+}
+
+a:hover {
+  color: var(--primary-dark);
+}
+
+button, .button {
+  font-family: var(--font-primary);
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+code, pre {
+  font-family: var(--font-mono);
+}
+
+/* Utility classes */
+.text-primary { color: var(--primary-color); }
+.text-secondary { color: var(--secondary-color); }
+.text-accent { color: var(--accent-color); }
+
+.bg-primary { background-color: var(--primary-color); }
+.bg-secondary { background-color: var(--secondary-color); }
+.bg-accent { background-color: var(--accent-color); }
+
+.font-primary { font-family: var(--font-primary); }
+.font-secondary { font-family: var(--font-secondary); }
+.font-mono { font-family: var(--font-mono); }
 
 /* Custom scrollbar styles */
 ::-webkit-scrollbar {
@@ -39,14 +181,14 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(108, 117, 125, 0.5);
+  background: rgba(108, 93, 172, 0.3); /* Claude purple with opacity */
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(73, 80, 87, 0.7);
+  background: rgba(108, 93, 172, 0.5); /* Claude purple with higher opacity */
   border: 2px solid transparent;
   background-clip: padding-box;
 }
@@ -65,7 +207,7 @@ input[type="file"] {
 }
 
 .glass-dark {
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(18, 18, 18, 0.7);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -83,7 +225,7 @@ input[type="file"] {
 
 /* Gradient text */
 .gradient-text {
-  background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+  background: linear-gradient(135deg, #6c5dac 0%, #41376c 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -112,7 +254,7 @@ input[type="file"] {
 
 .file-card:hover {
   box-shadow: var(--shadow-md);
-  border-color: rgba(67, 97, 238, 0.3);
+  border-color: rgba(108, 93, 172, 0.3);
 }
 
 .file-icon {
@@ -122,40 +264,40 @@ input[type="file"] {
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: rgba(67, 97, 238, 0.1);
-  color: #4361ee;
+  background: rgba(108, 93, 172, 0.1);
+  color: #6c5dac;
 }
 
 /* Button styles */
 .btn-gradient {
-  background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+  background: linear-gradient(135deg, #6c5dac 0%, #41376c 100%);
   color: white;
   border: none;
   border-radius: 12px;
   padding: 12px 24px;
   font-weight: 600;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 14px rgba(67, 97, 238, 0.3);
+  box-shadow: 0 4px 14px rgba(108, 93, 172, 0.3);
 }
 
 .btn-gradient:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(67, 97, 238, 0.4);
+  box-shadow: 0 6px 20px rgba(108, 93, 172, 0.4);
 }
 
 /* Drop zone styles */
 .drop-zone {
-  border: 2px dashed rgba(67, 97, 238, 0.3);
+  border: 2px dashed rgba(108, 93, 172, 0.3);
   border-radius: 16px;
   padding: 40px;
   text-align: center;
   transition: all 0.2s ease;
-  background-color: rgba(67, 97, 238, 0.03);
+  background-color: rgba(108, 93, 172, 0.03);
 }
 
 .drop-zone:hover {
-  border-color: rgba(67, 97, 238, 0.6);
-  background-color: rgba(67, 97, 238, 0.05);
+  border-color: rgba(108, 93, 172, 0.6);
+  background-color: rgba(108, 93, 172, 0.05);
 }
 
 /* Badge styles */
@@ -166,18 +308,18 @@ input[type="file"] {
   border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: rgba(67, 97, 238, 0.1);
-  color: #4361ee;
+  background: rgba(108, 93, 172, 0.1);
+  color: #6c5dac;
 }
 
 .badge-success {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  background: rgba(176, 87, 48, 0.1);
+  color: #b05730;
 }
 
 .badge-warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: rgba(166, 154, 100, 0.1);
+  color: #a69a64;
 }
 
 /* Dark mode adjustments */
@@ -187,11 +329,11 @@ input[type="file"] {
   }
   
   .file-card:hover {
-    border-color: rgba(67, 97, 238, 0.5);
+    border-color: rgba(138, 127, 189, 0.5);
   }
   
   .file-icon {
-    background: rgba(67, 97, 238, 0.2);
+    background: rgba(138, 127, 189, 0.2);
   }
   
   .drop-zone {
@@ -200,27 +342,27 @@ input[type="file"] {
   }
   
   .drop-zone:hover {
-    border-color: rgba(67, 97, 238, 0.5);
-    background-color: rgba(67, 97, 238, 0.1);
+    border-color: rgba(138, 127, 189, 0.5);
+    background-color: rgba(138, 127, 189, 0.1);
   }
   
   .badge {
-    background: rgba(67, 97, 238, 0.2);
+    background: rgba(138, 127, 189, 0.2);
   }
   
   .badge-success {
-    background: rgba(16, 185, 129, 0.2);
+    background: rgba(205, 111, 71, 0.2);
   }
   
   .badge-warning {
-    background: rgba(245, 158, 11, 0.2);
+    background: rgba(184, 175, 132, 0.2);
   }
   
   ::-webkit-scrollbar-thumb {
-    background: rgba(108, 117, 125, 0.3);
+    background: rgba(138, 127, 189, 0.3);
   }
   
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(108, 117, 125, 0.5);
+    background: rgba(138, 127, 189, 0.5);
   }
 }
