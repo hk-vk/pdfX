@@ -20,6 +20,7 @@
     "@types/react-beautiful-dnd": "^13.1.8",
     "autoprefixer": "^10.4.21",
     "browser-fs-access": "^0.35.0",
+    "compactor": "^0.1.2",
     "compressorjs": "^1.2.1",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.5.0",
@@ -48,6 +49,6 @@
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
     "vite": "^6.2.0",
-    "vite-plugin-static-copy": "^2.3.0"
+    "vite-plugin-static-copy": "^0.17.1"
   }
 }

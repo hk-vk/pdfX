@@ -8,14 +8,12 @@ import {
   Paper, 
   Slider, 
   useTheme,
-  alpha,
   Divider,
   Alert,
   Fade,
   Grid,
   Stack,
   IconButton,
-  Modal
 } from '@mui/material';
 import { saveAs } from 'file-saver';
 import Compressor from 'compressorjs';
@@ -31,8 +29,9 @@ import {
 import { useDropzone, FileWithPath } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import GlassmorphicContainer from './GlassmorphicContainer';
-import * as pdfjs from 'pdfjs-dist';
-import { Document, Page } from 'react-pdf';
+import * as pdfjs from "pdfjs-dist";
+import PDFViewer from './PDFViewer';
+import { compressFile as compactorCompressFile } from 'compactor';
 
 // Create motion components
 const MotionBox = motion(Box);
@@ -43,6 +42,9 @@ interface FileWithProgress {
   progress: number;
   status: 'waiting' | 'processing' | 'completed' | 'error';
   compressedUrl?: string;
+  originalSize?: number;
+  compressedSize?: number;
+  compressionRatio?: number;
   error?: string;
 }
 
@@ -56,13 +58,8 @@ const PDFCompressor: React.FC = () => {
 
   // Initialize PDF.js worker
   useEffect(() => {
-    // Set the worker source with a try-catch to handle potential errors
-    try {
-      const workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
-      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
-    } catch (error) {
-      console.error('Error initializing PDF.js worker:', error);
-    }
+    // Set the worker source to a local file that will be copied by vite-plugin-static-copy
+    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
   }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -72,6 +69,7 @@ const PDFCompressor: React.FC = () => {
         file,
         progress: 0,
         status: 'waiting' as const,
+        originalSize: file.size,
       }));
     setFiles(prev => [...prev, ...newFiles]);
   }, []);
@@ -82,73 +80,6 @@ const PDFCompressor: React.FC = () => {
     multiple: true,
   });
 
-  const compressImage = async (imageData: ImageData, quality: number): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = imageData.width;
-      canvas.height = imageData.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('Could not get canvas context'));
-        return;
-      }
-      
-      // Create an ImageData object
-      ctx.putImageData(imageData, 0, 0);
-      
-      // Convert to blob with specified quality
-      canvas.toBlob(
-        (blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error('Failed to compress image'));
-        },
-        'image/jpeg',
-        quality / 100
-      );
-    });
-  };
-
-  const extractImagesFromPDF = async (pdfBuffer: ArrayBuffer): Promise<{ images: Blob[], dims: { width: number, height: number }[] }> => {
-    const images: Blob[] = [];
-    const dims: { width: number, height: number }[] = [];
-    
-    const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;
-    const totalPages = pdf.numPages;
-    
-    for (let i = 1; i <= totalPages; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 1.0 });
-      
-      // Create canvas
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      if (!context) continue;
-      
-      // Set dimensions to match the page
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      dims.push({ width: viewport.width, height: viewport.height });
-      
-      // Render the page to the canvas
-      await page.render({
-        canvasContext: context,
-        viewport
-      }).promise;
-      
-      // Get the image from the canvas
-      const imgBlob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-          else resolve(new Blob()); // Empty blob as fallback
-        }, 'image/png');
-      });
-      
-      images.push(imgBlob);
-    }
-    
-    return { images, dims };
-  };
-
   const compressFile = async (fileWithProgress: FileWithProgress) => {
     try {
       const { file } = fileWithProgress;
@@ -156,67 +87,173 @@ const PDFCompressor: React.FC = () => {
         f.file === file ? { ...f, status: 'processing' } : f
       ));
 
-      // Load the PDF document
-      const arrayBuffer = await file.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
-      const pages = pdfDoc.getPages();
-
-      // Process each page
-      for (let i = 0; i < pages.length; i++) {
-        const page = pages[i];
-        const { width, height } = page.getSize();
-
-        // Create a temporary canvas to render the page
-        const canvas = document.createElement('canvas');
-        const scale = 2; // Increase scale for better quality
-        canvas.width = width * scale;
-        canvas.height = height * scale;
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Could not get canvas context');
-
-        // Load and render the page using PDF.js
-        const loadingTask = pdfjs.getDocument(arrayBuffer);
-        const pdfJsDoc = await loadingTask.promise;
-        const pdfJsPage = await pdfJsDoc.getPage(i + 1);
-        await pdfJsPage.render({
-          canvasContext: context,
-          viewport: pdfJsPage.getViewport({ scale }),
-        }).promise;
-
-        // Get the image data and compress it
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const compressedBlob = await compressImage(imageData, quality);
-        const compressedArrayBuffer = await compressedBlob.arrayBuffer();
-
-        // Embed the compressed image back into the PDF
-        const compressedImage = await pdfDoc.embedJpg(compressedArrayBuffer);
-        page.drawImage(compressedImage, {
-          x: 0,
-          y: 0,
-          width: page.getWidth(),
-          height: page.getHeight(),
+      // Read the file as an ArrayBuffer
+      const fileArrayBuffer = await file.arrayBuffer();
+      
+      // Try using compactor library first
+      try {
+        const fileData = {
+          bytes: await blobToBase64(new Blob([fileArrayBuffer])),
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type
+        };
+        
+        // Set options for compression
+        const options = {
+          pageScale: 1.0,
+          pageQuality: quality / 100
+        };
+        
+        // Progress update function
+        const updateProgress = (progress: number) => {
+          setFiles(prev => prev.map(f =>
+            f.file === file ? { ...f, progress: Math.round(progress * 100) } : f
+          ));
+        };
+        
+        // Process the file with compactor
+        await new Promise<void>((resolve, reject) => {
+          compactorCompressFile(
+            fileData, 
+            (result) => {
+              if (result) {
+                // Convert base64 back to Blob
+                const binaryString = window.atob(result.bytes);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                const compressedBlob = new Blob([bytes.buffer], { type: 'application/pdf' });
+                const compressedUrl = URL.createObjectURL(compressedBlob);
+                
+                // Update file status
+                setFiles(prev => prev.map(f =>
+                  f.file === file ? {
+                    ...f,
+                    status: 'completed',
+                    progress: 100,
+                    compressedUrl,
+                    compressedSize: result.fileSize,
+                    compressionRatio: result.fileSize / file.size
+                  } : f
+                ));
+                resolve();
+              } else {
+                reject(new Error('Compression failed'));
+              }
+            }, 
+            options
+          );
+          
+          // Simulate progress updates while compactor processes the file
+          let progress = 0;
+          const interval = setInterval(() => {
+            progress += 0.05;
+            if (progress >= 0.95) {
+              clearInterval(interval);
+            } else {
+              updateProgress(progress);
+            }
+          }, 100);
         });
+      } catch (compactorError) {
+        console.warn('Compactor compression failed, falling back to custom compression:', compactorError);
+        
+        // Fallback to custom compression method
+        // Load the PDF document
+        const pdfDoc = await PDFDocument.load(fileArrayBuffer);
+        const pages = pdfDoc.getPages();
 
-        // Update progress
-        const progress = ((i + 1) / pages.length) * 100;
+        // Process each page
+        for (let i = 0; i < pages.length; i++) {
+          const page = pages[i];
+          const { width, height } = page.getSize();
+
+          // Create a temporary canvas to render the page
+          const canvas = document.createElement('canvas');
+          const scale = 2; // Increase scale for better quality
+          canvas.width = width * scale;
+          canvas.height = height * scale;
+          const context = canvas.getContext('2d');
+          if (!context) throw new Error('Could not get canvas context');
+
+          // Load and render the page using PDF.js
+          const loadingTask = pdfjs.getDocument(fileArrayBuffer);
+          const pdfJsDoc = await loadingTask.promise;
+          const pdfJsPage = await pdfJsDoc.getPage(i + 1);
+          await pdfJsPage.render({
+            canvasContext: context,
+            viewport: pdfJsPage.getViewport({ scale }),
+          }).promise;
+
+          // Compress the page as an image
+          const compressedDataUrl = await new Promise<string>((resolve, reject) => {
+            // Convert the canvas to a Blob first
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  reject(new Error('Failed to create blob from canvas'));
+                  return;
+                }
+                
+                new Compressor(blob, {
+                  quality: quality / 100,
+                  success(result: Blob) {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(result);
+                  },
+                  error(err: Error) {
+                    reject(err);
+                  }
+                });
+              },
+              'image/jpeg'
+            );
+          });
+
+          // Convert data URL to ArrayBuffer
+          const base64Data = compressedDataUrl.split(',')[1];
+          const binaryString = window.atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          // Embed the compressed image back into the PDF
+          const compressedImage = await pdfDoc.embedJpg(bytes);
+          page.drawImage(compressedImage, {
+            x: 0,
+            y: 0,
+            width: page.getWidth(),
+            height: page.getHeight(),
+          });
+
+          // Update progress
+          const progress = ((i + 1) / pages.length) * 100;
+          setFiles(prev => prev.map(f =>
+            f.file === file ? { ...f, progress } : f
+          ));
+        }
+
+        // Save the compressed PDF
+        const compressedPdfBytes = await pdfDoc.save();
+        const compressedBlob = new Blob([compressedPdfBytes], { type: 'application/pdf' });
+        const compressedUrl = URL.createObjectURL(compressedBlob);
+
         setFiles(prev => prev.map(f =>
-          f.file === file ? { ...f, progress } : f
+          f.file === file ? {
+            ...f,
+            status: 'completed',
+            progress: 100,
+            compressedUrl,
+            compressedSize: compressedBlob.size,
+            compressionRatio: compressedBlob.size / file.size
+          } : f
         ));
       }
-
-      // Save the compressed PDF
-      const compressedPdfBytes = await pdfDoc.save();
-      const compressedBlob = new Blob([compressedPdfBytes], { type: 'application/pdf' });
-      const compressedUrl = URL.createObjectURL(compressedBlob);
-
-      setFiles(prev => prev.map(f =>
-        f.file === file ? {
-          ...f,
-          status: 'completed',
-          progress: 100,
-          compressedUrl,
-        } : f
-      ));
     } catch (error) {
       console.error('Error compressing PDF:', error);
       setFiles(prev => prev.map(f =>
@@ -229,11 +266,28 @@ const PDFCompressor: React.FC = () => {
     }
   };
 
+  // Helper function to convert Blob to base64
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const processFiles = async () => {
     setIsProcessing(true);
     try {
       const waitingFiles = files.filter(f => f.status === 'waiting');
-      await Promise.all(waitingFiles.map(compressFile));
+      // Process files one by one to avoid memory issues
+      for (const file of waitingFiles) {
+        await compressFile(file);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -268,6 +322,14 @@ const PDFCompressor: React.FC = () => {
     setPreviewFile(null);
   };
 
+  // Helper function to format file size
+  const formatFileSize = (sizeInBytes: number | undefined): string => {
+    if (sizeInBytes === undefined) return '';
+    if (sizeInBytes < 1024) return `${sizeInBytes} B`;
+    if (sizeInBytes < 1024 * 1024) return `${(sizeInBytes / 1024).toFixed(1)} KB`;
+    return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <GlassmorphicContainer sx={{ p: 3, borderRadius: 2 }}>
       <Stack spacing={3}>
@@ -286,6 +348,7 @@ const PDFCompressor: React.FC = () => {
             }}
           >
             <input {...getInputProps()} />
+            <CloudUploadIcon sx={{ fontSize: 48, mb: 2, color: 'primary.main' }} />
             <Typography>
               {isDragActive
                 ? 'Drop your PDF files here...'
@@ -303,6 +366,9 @@ const PDFCompressor: React.FC = () => {
             max={100}
             valueLabelDisplay="auto"
           />
+          <Typography variant="caption" color="text.secondary">
+            Lower quality = smaller file size, higher quality = better image quality
+          </Typography>
         </Box>
 
         <AnimatePresence>
@@ -323,10 +389,12 @@ const PDFCompressor: React.FC = () => {
                   gap: 2,
                 }}
               >
+                <DescriptionIcon color="primary" />
                 <Box flex={1}>
                   <Typography variant="body2" noWrap>
                     {fileWithProgress.file.name}
                   </Typography>
+                  
                   {fileWithProgress.status === 'processing' && (
                     <LinearProgress
                       variant="determinate"
@@ -334,6 +402,28 @@ const PDFCompressor: React.FC = () => {
                       sx={{ mt: 1 }}
                     />
                   )}
+                  
+                  {fileWithProgress.status === 'completed' && (
+                    <Stack direction="row" spacing={2} mt={1}>
+                      <Typography variant="caption" color="text.secondary">
+                        Original: {formatFileSize(fileWithProgress.originalSize)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Compressed: {formatFileSize(fileWithProgress.compressedSize)}
+                      </Typography>
+                      {fileWithProgress.compressionRatio && (
+                        <Typography 
+                          variant="caption" 
+                          color={fileWithProgress.compressionRatio < 1 ? 'success.main' : 'warning.main'}
+                        >
+                          {fileWithProgress.compressionRatio < 1 
+                            ? `Saved ${Math.round((1 - fileWithProgress.compressionRatio) * 100)}%` 
+                            : 'No size reduction'}
+                        </Typography>
+                      )}
+                    </Stack>
+                  )}
+                  
                   {fileWithProgress.status === 'error' && (
                     <Typography color="error" variant="caption">
                       {fileWithProgress.error}
@@ -378,32 +468,22 @@ const PDFCompressor: React.FC = () => {
             variant="contained"
             onClick={processFiles}
             disabled={isProcessing || !files.some(f => f.status === 'waiting')}
+            startIcon={<CompressIcon />}
           >
             {isProcessing ? 'Compressing...' : 'Compress Files'}
           </Button>
         )}
       </Stack>
 
-      <Modal open={Boolean(previewFile)} onClose={closePreview}>
-        <Box sx={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          maxWidth: '90%',
-          maxHeight: '90%',
-          overflowY: 'auto',
-          bgcolor: 'background.paper',
-          boxShadow: 24,
-          p: 4,
-        }}>
-          {previewFile && (
-            <Document file={previewFile.compressedUrl}>
-              <Page pageNumber={1} />
-            </Document>
-          )}
-        </Box>
-      </Modal>
+      {previewFile && previewFile.compressedUrl && (
+        <PDFViewer
+          fileUrl={previewFile.compressedUrl}
+          fileName={`compressed_${previewFile.file.name}`}
+          open={Boolean(previewFile)}
+          onClose={closePreview}
+          onDownload={() => downloadFile(previewFile)}
+        />
+      )}
     </GlassmorphicContainer>
   );
 };

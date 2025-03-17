@@ -31,7 +31,7 @@ import JSZip from 'jszip';
 import * as pdfjs from 'pdfjs-dist';
 
 // Initialize PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 
 const PDFToImages: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);

@@ -2,6 +2,14 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+
+// Get the path to the pdf.worker file
+const pdfjsDistPath = resolve(require.resolve('pdfjs-dist/package.json'), '..');
+const workerFile = resolve(pdfjsDistPath, 'build/pdf.worker.min.js');
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -10,16 +18,17 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         {
-          src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
-          dest: '',
+          src: workerFile,
+          dest: '', // Will copy to the root of the build directory
         },
       ],
+      structured: false,
     }),
   ],
   resolve: {
     alias: {
       // Ensure pdfjs-dist is properly resolved
-      'pdfjs-dist': resolve(__dirname, 'node_modules/pdfjs-dist/build/pdf.mjs'),
+      'pdfjs-dist': resolve(pdfjsDistPath, 'build/pdf.mjs'),
     },
   },
   optimizeDeps: {
