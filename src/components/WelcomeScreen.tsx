@@ -133,7 +133,7 @@ const WelcomeScreen: React.FC = () => {
           alignItems: 'center'
         }}
       >
-        <Logo height={60} width={60} />
+        <Logo />
         <Typography 
           variant="h3" 
           component="h1" 
@@ -142,14 +142,15 @@ const WelcomeScreen: React.FC = () => {
             mt: 2,
             fontWeight: 800,
             fontFamily: "'Montserrat', sans-serif",
+            fontSize: { xs: '2.5rem', sm: '3.5rem' },
             background: theme.palette.mode === 'dark' 
-              ? 'linear-gradient(90deg, #8a7fbd 0%, #6c5dac 100%)' 
-              : 'linear-gradient(90deg, #6c5dac 0%, #41376c 100%)',
+              ? 'linear-gradient(135deg, #8a7fbd 0%, #cd6f47 100%)' 
+              : 'linear-gradient(135deg, #6c5dac 0%, #b05730 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
             textFillColor: 'transparent',
-            letterSpacing: '-1px',
+            letterSpacing: '-2px',
             textTransform: 'uppercase'
           }}
         >

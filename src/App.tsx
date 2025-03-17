@@ -95,10 +95,7 @@ const App: React.FC = () => {
   const drawer = (
     <Box sx={{ width: 250 }} role="presentation" onClick={toggleDrawer}>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
-        <Logo height={32} width={32} />
-        <Typography variant="h6" sx={{ ml: 1, fontWeight: 600, fontFamily: "'Montserrat', sans-serif" }}>
-          pdfX
-        </Typography>
+        <Logo />
       </Box>
       <Divider />
       <List>
@@ -162,19 +159,7 @@ const App: React.FC = () => {
                   color: 'text.primary'
                 }}
               >
-                <Logo height={28} width={28} />
-                <Typography 
-                  variant="h6" 
-                  sx={{ 
-                    ml: 1,
-                    fontWeight: 700,
-                    display: { xs: 'none', sm: 'block' },
-                    fontFamily: "'Montserrat', sans-serif",
-                    letterSpacing: '-0.5px'
-                  }}
-                >
-                  pdfX
-                </Typography>
+                <Logo />
               </Box>
               
               <Box sx={{ display: { xs: 'none', md: 'flex' }, ml: 4 }}>
