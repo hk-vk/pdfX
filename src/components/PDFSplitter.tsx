@@ -1,583 +1,225 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { 
-  Button, 
   Box, 
   Typography, 
-  LinearProgress, 
   Paper, 
-  Slider, 
-  FormControl, 
-  InputLabel, 
-  Select, 
-  MenuItem, 
-  IconButton, 
-  Tooltip, 
-  Alert, 
-  Fade,
-  Divider,
-  Stack,
-  Chip,
-  alpha,
+  Button, 
+  Slider,
+  IconButton,
+  Alert,
+  Snackbar,
   useTheme,
-  SelectChangeEvent
+  alpha,
+  Stack
 } from '@mui/material';
+import { 
+  ContentCut as SplitIcon,
+  FileUpload as FileUploadIcon,
+  Download as DownloadIcon,
+  ErrorOutline as ErrorOutlineIcon
+} from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDropzone } from 'react-dropzone';
 import { saveAs } from 'file-saver';
-import FileUploadIcon from '@mui/icons-material/FileUpload';
-import DescriptionIcon from '@mui/icons-material/Description';
-import DeleteIcon from '@mui/icons-material/Delete';
-import ContentCutIcon from '@mui/icons-material/ContentCut';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-
-// Create motion components
-const MotionBox = motion(Box);
-const MotionPaper = motion(Paper);
-
-type SplitMode = 'range' | 'single' | 'all';
+import PageHeader from './PageHeader';
 
 const PDFSplitter: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [splitMode, setSplitMode] = useState<SplitMode>('range');
-  const [pageRange, setPageRange] = useState<[number, number]>([1, 2]);
-  const [success, setSuccess] = useState(false);
-  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [pageCount, setPageCount] = useState<number>(0);
+  const [range, setRange] = useState<[number, number]>([1, 1]);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const selectedFile = event.target.files[0];
-      setFile(selectedFile);
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await PDFDocument.load(arrayBuffer);
+      const count = pdf.getPageCount();
       
-      // Get page count
-      try {
-        const fileBuffer = await selectedFile.arrayBuffer();
-        const pdf = await PDFDocument.load(fileBuffer);
-        const count = pdf.getPageCount();
-        setPageCount(count);
-        setPageRange([1, count > 1 ? 2 : 1]);
-      } catch (error) {
-        console.error('Error loading PDF:', error);
-      }
+      setFile(file);
+      setPageCount(count);
+      setRange([1, count]);
+    } catch (error) {
+      setError('Invalid PDF file. Please try another file.');
     }
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf']
+    },
+    maxFiles: 1,
+    multiple: false
+  });
+
+  const handleRangeChange = (event: Event, newValue: number | number[]) => {
+    setRange(newValue as [number, number]);
   };
 
   const splitPDF = async () => {
-    if (!file || !pageCount) return;
-
-    setIsProcessing(true);
-    setProgress(0);
-    setSuccess(false);
+    if (!file) return;
+    
+    setProcessing(true);
+    setError(null);
 
     try {
-      const fileBuffer = await file.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(fileBuffer);
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await PDFDocument.load(arrayBuffer);
+      const newPdf = await PDFDocument.create();
       
-      if (splitMode === 'all') {
-        // Split into individual pages
-        let processedPages = 0;
-        
-        for (let i = 0; i < pageCount; i++) {
-          const newPdf = await PDFDocument.create();
-          const [copiedPage] = await newPdf.copyPages(pdfDoc, [i]);
-          newPdf.addPage(copiedPage);
-          
-          const pdfBytes = await newPdf.save();
-          const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-          saveAs(blob, `${file.name.replace('.pdf', '')}_page-${i + 1}.pdf`);
-          
-          processedPages++;
-          setProgress((processedPages / pageCount) * 100);
-        }
-      } else if (splitMode === 'single') {
-        // Extract a single page
-        const pageIndex = pageRange[0] - 1;
-        const newPdf = await PDFDocument.create();
-        const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageIndex]);
-        newPdf.addPage(copiedPage);
-        
-        const pdfBytes = await newPdf.save();
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        saveAs(blob, `${file.name.replace('.pdf', '')}_page-${pageRange[0]}.pdf`);
-        
-        setProgress(100);
-      } else if (splitMode === 'range') {
-        // Extract a range of pages
-        const startPage = pageRange[0] - 1;
-        const endPage = pageRange[1] - 1;
-        const newPdf = await PDFDocument.create();
-        
-        const pageIndexes = Array.from(
-          { length: endPage - startPage + 1 }, 
-          (_, i) => startPage + i
-        );
-        
-        const copiedPages = await newPdf.copyPages(pdfDoc, pageIndexes);
-        copiedPages.forEach(page => newPdf.addPage(page));
-        
-        const pdfBytes = await newPdf.save();
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        saveAs(blob, `${file.name.replace('.pdf', '')}_pages-${pageRange[0]}-${pageRange[1]}.pdf`);
-        
-        setProgress(100);
-      }
+      const pages = await newPdf.copyPages(pdf, range.map(p => p - 1));
+      pages.forEach(page => newPdf.addPage(page));
       
-      setSuccess(true);
-      
-      // Reset success message after 5 seconds
-      setTimeout(() => {
-        setSuccess(false);
-      }, 5000);
+      const pdfBytes = await newPdf.save();
+      const fileName = file.name.replace('.pdf', `_pages_${range[0]}-${range[1]}.pdf`);
+      saveAs(new Blob([pdfBytes]), fileName);
     } catch (error) {
-      console.error('Error splitting PDF:', error);
-      // TODO: Add error handling UI
+      setError('Failed to split PDF. Please try again.');
     } finally {
-      setIsProcessing(false);
+      setProcessing(false);
     }
-  };
-
-  const handleRemoveFile = () => {
-    setFile(null);
-    setPageCount(null);
-  };
-
-  const handleSplitModeChange = (event: SelectChangeEvent) => {
-    setSplitMode(event.target.value as SplitMode);
-  };
-
-  const handlePageRangeChange = (event: Event, newValue: number | number[]) => {
-    setPageRange(newValue as [number, number]);
   };
 
   return (
     <Box>
-      <Box sx={{ mb: 4 }}>
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Typography variant="h5" gutterBottom sx={{ 
-            mb: 1,
-            fontWeight: 700,
-            background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}>
-            Split PDF Document
-          </Typography>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Extract specific pages or split your PDF into multiple documents.
-          </Typography>
-        </motion.div>
-      </Box>
-      
-      <AnimatePresence mode="wait">
-        {!file ? (
-          <motion.div
-            key="upload"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Paper 
-              variant="outlined" 
-              sx={{ 
-                p: 5,
-                borderRadius: 3,
-                borderStyle: 'dashed',
-                borderWidth: 2,
-                borderColor: theme => alpha(theme.palette.primary.main, 0.2),
-                bgcolor: theme => alpha(theme.palette.primary.main, 0.03),
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                transition: 'all 0.2s ease',
-                cursor: 'pointer',
-                '&:hover': {
-                  borderColor: theme => alpha(theme.palette.primary.main, 0.5),
-                  bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
-                }
-              }}
-              component="label"
-              htmlFor="pdf-split-input"
-            >
-              <input
-                accept=".pdf"
-                style={{ display: 'none' }}
-                id="pdf-split-input"
-                type="file"
-                onChange={handleFileChange}
-                disabled={isProcessing}
-              />
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2, duration: 0.3 }}
-              >
-                <CloudUploadIcon sx={{ 
-                  fontSize: 60, 
-                  color: 'primary.main', 
-                  mb: 2, 
-                  opacity: 0.7 
-                }} />
-              </motion.div>
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.3, duration: 0.3 }}
-              >
-                <Typography variant="h6" gutterBottom fontWeight={600}>
-                  Select a PDF to Split
-                </Typography>
-              </motion.div>
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4, duration: 0.3 }}
-              >
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400 }}>
-                  Upload a PDF document to extract pages or split into multiple files
-                </Typography>
-              </motion.div>
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.5, duration: 0.3 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Button
-                  variant="contained"
-                  component="span"
-                  startIcon={<FileUploadIcon />}
-                  sx={{
-                    background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-                    px: 3,
-                    py: 1.5,
-                  }}
-                >
-                  Select PDF File
-                </Button>
-              </motion.div>
-            </Paper>
-          </motion.div>
-        ) : (
-          <MotionBox
-            key="file-options"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-          >
-            <MotionPaper 
-              variant="outlined" 
-              sx={{ 
-                p: 3, 
-                borderRadius: 3,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                mb: 3,
-                boxShadow: theme => isDarkMode 
-                  ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
-                  : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
-              }}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.3 }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Box sx={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  bgcolor: theme => alpha(theme.palette.primary.main, 0.1),
-                  color: 'primary.main',
-                  mr: 2
-                }}>
-                  <DescriptionIcon sx={{ fontSize: 28 }} />
-                </Box>
-                <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                    {file.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {pageCount} pages
-                  </Typography>
-                </Box>
-              </Box>
-              <Tooltip title="Remove file">
-                <IconButton 
-                  onClick={handleRemoveFile}
-                  disabled={isProcessing}
-                  size="small"
-                  sx={{
-                    color: 'error.main',
-                    opacity: 0.7,
-                    '&:hover': {
-                      opacity: 1,
-                    }
-                  }}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Tooltip>
-            </MotionPaper>
+      <PageHeader
+        title="Split PDF"
+        description="Extract specific pages from your PDF document. Select a page range and create a new PDF with just the pages you need."
+        icon={<SplitIcon sx={{ fontSize: 32 }} />}
+      />
 
-            <MotionPaper 
-              variant="outlined" 
-              sx={{ 
-                p: 3, 
-                borderRadius: 3, 
-                mb: 3,
-                boxShadow: theme => isDarkMode 
-                  ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
-                  : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
-              }}
-              initial={{ opacity: 0, y: 10 }}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 3,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: theme => theme.palette.mode === 'dark'
+            ? 'rgba(31, 31, 31, 0.8)'
+            : 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        <Box
+          {...getRootProps()}
+          sx={{
+            border: '2px dashed',
+            borderColor: 'primary.main',
+            borderRadius: 2,
+            p: 4,
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            backgroundColor: theme => alpha(theme.palette.primary.main, 0.05),
+            '&:hover': {
+              backgroundColor: theme => alpha(theme.palette.primary.main, 0.08),
+              borderColor: 'primary.dark'
+            }
+          }}
+        >
+          <input {...getInputProps()} />
+          <FileUploadIcon 
+            sx={{ 
+              fontSize: 48, 
+              color: 'primary.main',
+              mb: 2
+            }} 
+          />
+          <Typography variant="h6" gutterBottom sx={{ fontFamily: "'Montserrat', sans-serif" }}>
+            {file ? 'Drop a different PDF file' : 'Drop a PDF file here'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            or click to select file
+          </Typography>
+        </Box>
+
+        <AnimatePresence>
+          {file && pageCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.3 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
             >
-              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 3 }}>
-                Split Options
-              </Typography>
-              
-              <FormControl fullWidth variant="outlined" size="small" sx={{ mb: 3 }}>
-                <InputLabel id="split-mode-label">Split Mode</InputLabel>
-                <Select
-                  labelId="split-mode-label"
-                  value={splitMode}
-                  onChange={handleSplitModeChange}
-                  label="Split Mode"
-                  disabled={isProcessing}
-                >
-                  <MenuItem value="range">Extract Page Range</MenuItem>
-                  <MenuItem value="single">Extract Single Page</MenuItem>
-                  <MenuItem value="all">Split into Individual Pages</MenuItem>
-                </Select>
-              </FormControl>
-              
-              <AnimatePresence mode="wait">
-                {(splitMode === 'range' || splitMode === 'single') && (
-                  <motion.div
-                    key={splitMode}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <Box sx={{ mb: 3 }}>
-                      <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
-                        {splitMode === 'range' ? 'Page Range' : 'Page Number'}
-                      </Typography>
-                      
-                      <Box sx={{ px: 1 }}>
-                        <Slider
-                          value={splitMode === 'range' ? pageRange : [pageRange[0], pageRange[0]]}
-                          onChange={handlePageRangeChange}
-                          min={1}
-                          max={pageCount || 1}
-                          step={1}
-                          marks
-                          valueLabelDisplay="auto"
-                          disabled={isProcessing || !pageCount}
-                          disableSwap
-                          sx={{
-                            '& .MuiSlider-thumb': {
-                              width: 16,
-                              height: 16,
-                            },
-                            '& .MuiSlider-track': {
-                              background: 'linear-gradient(90deg, #4361ee, #3a0ca3)',
-                            }
-                          }}
-                        />
-                      </Box>
-                      
+              <Box sx={{ mt: 4 }}>
+                <Stack spacing={3}>
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                      Selected File
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {file.name} ({pageCount} pages)
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                      Page Range
+                    </Typography>
+                    <Box sx={{ px: 2 }}>
+                      <Slider
+                        value={range}
+                        onChange={handleRangeChange}
+                        min={1}
+                        max={pageCount}
+                        valueLabelDisplay="auto"
+                        disableSwap
+                      />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography variant="caption" color="text.secondary">Page 1</Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Page {pageCount || 1}
+                          Page {pageCount}
                         </Typography>
                       </Box>
                     </Box>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              
-              <Divider sx={{ my: 2 }} />
-              
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" sx={{ mb: 2, fontWeight: 500 }}>
-                  Output Summary
-                </Typography>
-                
-                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-                  <AnimatePresence mode="wait">
-                    {splitMode === 'all' && (
-                      <motion.div
-                        key="all"
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Chip 
-                          label={`${pageCount} individual PDF files`} 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined" 
-                        />
-                      </motion.div>
-                    )}
-                    
-                    {splitMode === 'single' && (
-                      <motion.div
-                        key="single"
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Chip 
-                          label={`Extract page ${pageRange[0]}`} 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined" 
-                        />
-                      </motion.div>
-                    )}
-                    
-                    {splitMode === 'range' && (
-                      <motion.div
-                        key="range"
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Chip 
-                          label={`Pages ${pageRange[0]} to ${pageRange[1]}`} 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined" 
-                        />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="contained"
+                      onClick={splitPDF}
+                      disabled={processing}
+                      startIcon={<DownloadIcon />}
+                      sx={{
+                        background: theme => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                        color: 'white',
+                        '&:hover': {
+                          background: theme => `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`
+                        }
+                      }}
+                    >
+                      {processing ? 'Processing...' : 'Extract Pages'}
+                    </Button>
+                  </Box>
                 </Stack>
               </Box>
-            </MotionPaper>
-            
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={splitPDF}
-                disabled={isProcessing}
-                startIcon={<ContentCutIcon />}
-                fullWidth
-                size="large"
-                sx={{
-                  background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-                  py: 1.5,
-                  fontWeight: 600,
-                  boxShadow: '0 4px 14px rgba(67, 97, 238, 0.3)',
-                  '&:hover': {
-                    boxShadow: '0 6px 20px rgba(67, 97, 238, 0.4)',
-                  }
-                }}
-              >
-                Split PDF
-              </Button>
             </motion.div>
-          </MotionBox>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
+      </Paper>
 
-      {isProcessing && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setError(null)} 
+          severity="error" 
+          sx={{ width: '100%' }}
+          icon={<ErrorOutlineIcon />}
         >
-          <Box sx={{ width: '100%', mt: 4 }}>
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mb: 1
-            }}>
-              <Typography variant="body2" color="text.secondary">
-                Splitting PDF...
-              </Typography>
-              <Typography variant="body2" color="primary" fontWeight={600}>
-                {Math.round(progress)}%
-              </Typography>
-            </Box>
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.3 }}
-            >
-              <LinearProgress 
-                variant="determinate" 
-                value={100} 
-                sx={{ 
-                  height: 8, 
-                  borderRadius: 4,
-                }}
-              />
-            </motion.div>
-          </Box>
-        </motion.div>
-      )}
-
-      <AnimatePresence>
-        {success && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Alert 
-              icon={<CheckCircleIcon fontSize="inherit" />} 
-              severity="success"
-              sx={{ 
-                mt: 3,
-                borderRadius: 2,
-                boxShadow: theme => `0 4px 12px ${alpha(theme.palette.success.main, 0.2)}`,
-              }}
-            >
-              PDF successfully split! Your download should start automatically.
-            </Alert>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

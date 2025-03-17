@@ -14,6 +14,8 @@ import {
   Grid,
   Stack,
   IconButton,
+  Snackbar,
+  alpha,
 } from '@mui/material';
 import { saveAs } from 'file-saver';
 import Compressor from 'compressorjs';
@@ -24,13 +26,16 @@ import {
   Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
   Info as InfoIcon,
-  CloudUpload as CloudUploadIcon
+  CloudUpload as CloudUploadIcon,
+  Download as DownloadIcon,
+  ErrorOutline as ErrorOutlineIcon
 } from '@mui/icons-material';
 import { useDropzone, FileWithPath } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import GlassmorphicContainer from './GlassmorphicContainer';
 import * as pdfjs from "pdfjs-dist";
 import PDFViewer from './PDFViewer';
+import PageHeader from './PageHeader';
 
 // Create motion components
 const MotionBox = motion(Box);
@@ -54,6 +59,7 @@ const PDFCompressor: React.FC = () => {
   const [previewFile, setPreviewFile] = useState<FileWithProgress | null>(null);
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
+  const [error, setError] = useState<string | null>(null);
 
   // Initialize PDF.js worker
   useEffect(() => {
@@ -278,99 +284,148 @@ const PDFCompressor: React.FC = () => {
   const compressionStats = getTotalCompressionStats();
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, sm: 3, md: 4 } }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
-        PDF Compressor
-      </Typography>
-      
-      <Typography variant="body1" color="text.secondary" paragraph>
-        Reduce PDF file size while maintaining reasonable quality. All processing happens in your browser for maximum privacy.
-      </Typography>
-      
-      <GlassmorphicContainer sx={{ mb: 4, p: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Compression Quality
-        </Typography>
-        <Box sx={{ px: 2, pb: 2 }}>
-          <Slider
-            value={quality}
-            onChange={(_, newValue) => setQuality(newValue as number)}
-            aria-labelledby="compression-quality-slider"
-            valueLabelDisplay="auto"
-            step={5}
-            marks
-            min={10}
-            max={90}
-            disabled={isProcessing}
-            sx={{ mb: 2 }}
-          />
-          <Grid container spacing={2}>
-            <Grid item xs={4}>
-              <Typography variant="body2" color="text.secondary" align="center">
-                Smaller File (10%)
-              </Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <Typography variant="body2" color="text.secondary" align="center">
-                Balanced ({quality}%)
-              </Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <Typography variant="body2" color="text.secondary" align="center">
-                Higher Quality (90%)
-              </Typography>
-            </Grid>
-          </Grid>
-        </Box>
-      </GlassmorphicContainer>
-      
-      <GlassmorphicContainer sx={{ mb: 4 }}>
+    <Box>
+      <PageHeader
+        title="Compress PDF"
+        description="Reduce the file size of your PDF documents while maintaining quality. Perfect for sharing or uploading large PDF files."
+        icon={<CompressIcon sx={{ fontSize: 32 }} />}
+      />
+
+      <Paper
+        elevation={0}
+        sx={{
+          p: 3,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: theme => theme.palette.mode === 'dark'
+            ? 'rgba(31, 31, 31, 0.8)'
+            : 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(10px)'
+        }}
+      >
         <Box
           {...getRootProps()}
           sx={{
-            p: 4,
             border: '2px dashed',
-            borderColor: isDragActive 
-              ? 'primary.main' 
-              : theme.palette.mode === 'dark' 
-                ? 'rgba(255, 255, 255, 0.2)' 
-                : 'rgba(0, 0, 0, 0.1)',
+            borderColor: 'primary.main',
             borderRadius: 2,
+            p: 4,
             textAlign: 'center',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
-            backgroundColor: isDragActive 
-              ? theme.palette.mode === 'dark' 
-                ? 'rgba(129, 140, 248, 0.1)' 
-                : 'rgba(79, 70, 229, 0.05)' 
-              : 'transparent',
+            backgroundColor: theme => alpha(theme.palette.primary.main, 0.05),
             '&:hover': {
-              borderColor: 'primary.main',
-              backgroundColor: theme.palette.mode === 'dark' 
-                ? 'rgba(129, 140, 248, 0.05)' 
-                : 'rgba(79, 70, 229, 0.03)',
+              backgroundColor: theme => alpha(theme.palette.primary.main, 0.08),
+              borderColor: 'primary.dark'
             }
           }}
         >
           <input {...getInputProps()} />
-          <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
-            {isDragActive ? 'Drop PDFs here' : 'Drag & drop PDF files here'}
+          <CloudUploadIcon 
+            sx={{ 
+              fontSize: 48, 
+              color: 'primary.main',
+              mb: 2
+            }} 
+          />
+          <Typography variant="h6" gutterBottom sx={{ fontFamily: "'Montserrat', sans-serif" }}>
+            {files.length > 0 ? 'Drop more PDFs here' : 'Drop PDFs here'}
           </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
-            Or click to browse your files
+          <Typography variant="body2" color="text.secondary">
+            or click to select files
           </Typography>
-          <Button 
-            variant="contained" 
-            startIcon={<FileUploadIcon />}
-            onClick={(e) => e.stopPropagation()}
-            sx={{ pointerEvents: 'none' }}
-          >
-            Select Files
-          </Button>
         </Box>
-      </GlassmorphicContainer>
-      
+
+        <AnimatePresence>
+          {files.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Box sx={{ mt: 4 }}>
+                <Stack spacing={3}>
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                      Selected Files
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {files.map(f => f.file.name).join(', ')}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                      Compression Level
+                    </Typography>
+                    <Box sx={{ px: 2 }}>
+                      <Slider
+                        value={quality}
+                        onChange={(_, newValue) => setQuality(newValue as number)}
+                        min={30}
+                        max={100}
+                        valueLabelDisplay="auto"
+                        valueLabelFormat={value => `${value}%`}
+                      />
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" color="text.secondary">Maximum Compression</Typography>
+                        <Typography variant="caption" color="text.secondary">Best Quality</Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="contained"
+                      onClick={processFiles}
+                      disabled={isProcessing || files.every(f => f.status !== 'waiting')}
+                      startIcon={<CompressIcon />}
+                      sx={{
+                        background: theme => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                        color: 'white',
+                        '&:hover': {
+                          background: theme => `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`
+                        }
+                      }}
+                    >
+                      {isProcessing ? 'Compressing...' : 'Compress All'}
+                    </Button>
+                  </Box>
+                </Stack>
+              </Box>
+
+              {isProcessing && (
+                <Box sx={{ mt: 4 }}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 1
+                  }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Compressing PDFs...
+                    </Typography>
+                    <Typography variant="body2" color="primary" fontWeight={500}>
+                      {Math.round(files.reduce((sum, f) => sum + f.progress, 0) / files.length)}%
+                    </Typography>
+                  </Box>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={files.reduce((sum, f) => sum + f.progress, 0) / files.length} 
+                    sx={{ 
+                      height: 8, 
+                      borderRadius: 4,
+                    }}
+                  />
+                </Box>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </Paper>
+
       {files.length > 0 && (
         <GlassmorphicContainer sx={{ mb: 4 }}>
           <Box sx={{ p: 3 }}>
@@ -378,15 +433,6 @@ const PDFCompressor: React.FC = () => {
               <Typography variant="h6">
                 Files ({files.length})
               </Typography>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<CompressIcon />}
-                onClick={processFiles}
-                disabled={isProcessing || files.every(f => f.status !== 'waiting')}
-              >
-                {isProcessing ? 'Compressing...' : 'Compress All'}
-              </Button>
             </Box>
             
             <Stack spacing={2}>
@@ -595,6 +641,22 @@ const PDFCompressor: React.FC = () => {
           onDownload={() => downloadFile(previewFile)}
         />
       )}
+
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setError(null)} 
+          severity="error" 
+          sx={{ width: '100%' }}
+          icon={<ErrorOutlineIcon />}
+        >
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

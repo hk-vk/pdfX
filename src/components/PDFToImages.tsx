@@ -1,395 +1,415 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
+import * as pdfjs from 'pdfjs-dist';
 import { 
-  Button, 
   Box, 
   Typography, 
-  LinearProgress, 
   Paper, 
-  Grid, 
-  IconButton, 
-  Tooltip, 
-  Alert, 
-  Fade,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Chip,
-  Stack,
+  Button, 
+  Slider,
+  Alert,
+  Snackbar,
+  useTheme,
   alpha,
-  useTheme
+  Stack,
+  LinearProgress,
+  Grid,
+  Card,
+  CardMedia,
+  CardActions,
+  IconButton,
+  Tooltip
 } from '@mui/material';
-import { saveAs } from 'file-saver';
-import FileUploadIcon from '@mui/icons-material/FileUpload';
-import DescriptionIcon from '@mui/icons-material/Description';
-import DeleteIcon from '@mui/icons-material/Delete';
-import ImageIcon from '@mui/icons-material/Image';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import { 
+  Image as ImageIcon,
+  FileUpload as FileUploadIcon,
+  Download as DownloadIcon,
+  ErrorOutline as ErrorOutlineIcon,
+  Delete as DeleteIcon,
+  ZoomIn as ZoomInIcon
+} from '@mui/icons-material';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
-import * as pdfjs from 'pdfjs-dist';
+import { saveAs } from 'file-saver';
+import PageHeader from './PageHeader';
 
 // Initialize PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+
+interface ImagePreview {
+  url: string;
+  pageNumber: number;
+  blob: Blob;
+}
 
 const PDFToImages: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [images, setImages] = useState<ImagePreview[]>([]);
+  const [quality, setQuality] = useState<number>(80);
+  const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [format, setFormat] = useState<'png' | 'jpeg'>('png');
-  const [dpi, setDpi] = useState<number>(300);
-  const [success, setSuccess] = useState(false);
-  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const selectedFile = event.target.files[0];
-      setFile(selectedFile);
-      
-      // Get page count
-      try {
-        const fileBuffer = await selectedFile.arrayBuffer();
-        const pdf = await PDFDocument.load(fileBuffer);
-        setPageCount(pdf.getPageCount());
-      } catch (error) {
-        console.error('Error loading PDF:', error);
-      }
-    }
-  };
-
-  const convertPDFToImages = async () => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
     if (!file) return;
 
-    setIsProcessing(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      await PDFDocument.load(arrayBuffer); // Validate PDF
+      setFile(file);
+      setImages([]);
+    } catch (error) {
+      setError('Invalid PDF file. Please try another file.');
+    }
+  }, []);
+
+  const { getRootProps, getInputProps } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf']
+    },
+    maxFiles: 1,
+    multiple: false
+  });
+
+  const handleQualityChange = (event: Event, newValue: number | number[]) => {
+    setQuality(newValue as number);
+  };
+
+  const convertToImages = async () => {
+    if (!file) return;
+    
+    setProcessing(true);
     setProgress(0);
-    setSuccess(false);
+    setError(null);
+    setImages([]);
 
     try {
-      const fileBuffer = await file.arrayBuffer();
-      const pdf = await pdfjs.getDocument({ data: fileBuffer }).promise;
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
       const totalPages = pdf.numPages;
-      
-      const zip = new JSZip();
-      const imgFolder = zip.folder('images');
-      
-      for (let i = 1; i <= totalPages; i++) {
-        const page = await pdf.getPage(i);
+      const newImages: ImagePreview[] = [];
+
+      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 2 });
         
-        // Calculate scale based on DPI (PDF uses 72 DPI as default)
-        const scale = dpi / 72;
-        const viewport = page.getViewport({ scale });
-        
-        // Prepare canvas for rendering
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        canvas.width = viewport.width;
+        if (!context) continue;
+
         canvas.height = viewport.height;
-        
-        if (!context) {
-          throw new Error('Could not get canvas context');
-        }
-        
-        // Render PDF page to canvas
+        canvas.width = viewport.width;
+
         await page.render({
           canvasContext: context,
-          viewport,
+          viewport: viewport
         }).promise;
-        
-        // Convert canvas to image data
-        let imageData;
-        if (format === 'png') {
-          imageData = canvas.toDataURL('image/png');
-        } else {
-          imageData = canvas.toDataURL('image/jpeg', 0.9);
-        }
-        
-        // Remove data URL prefix to get just the base64 data
-        const base64Data = imageData.split(',')[1];
-        
-        // Add image to zip
-        if (imgFolder) {
-          imgFolder.file(`page-${i}.${format}`, base64Data, { base64: true });
-        }
-        
-        // Update progress
-        setProgress((i / totalPages) * 100);
+
+        const blob = await new Promise<Blob>((resolve) => {
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+          }, 'image/png', quality / 100);
+        });
+
+        newImages.push({
+          url: URL.createObjectURL(blob),
+          pageNumber,
+          blob
+        });
+
+        setProgress((pageNumber / totalPages) * 100);
       }
-      
-      // Generate zip file
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      saveAs(zipBlob, `${file.name.replace('.pdf', '')}_images.zip`);
-      
-      setSuccess(true);
-      
-      // Reset success message after 5 seconds
-      setTimeout(() => {
-        setSuccess(false);
-      }, 5000);
+
+      setImages(newImages);
     } catch (error) {
-      console.error('Error converting PDF to images:', error);
-      // TODO: Add error handling UI
+      setError('Failed to convert PDF to images. Please try again.');
     } finally {
-      setIsProcessing(false);
+      setProcessing(false);
     }
   };
 
-  const handleRemoveFile = () => {
-    setFile(null);
-    setPageCount(null);
+  const downloadImages = async () => {
+    if (images.length === 0) return;
+
+    try {
+      const zip = new JSZip();
+      
+      images.forEach((image, index) => {
+        zip.file(`page-${image.pageNumber}.png`, image.blob);
+      });
+      
+      const content = await zip.generateAsync({ type: 'blob' });
+      const fileName = file?.name.replace('.pdf', '') || 'pdf-images';
+      saveAs(content, `${fileName}.zip`);
+    } catch (error) {
+      setError('Failed to download images. Please try again.');
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => {
+      const newImages = [...prev];
+      URL.revokeObjectURL(newImages[index].url);
+      newImages.splice(index, 1);
+      return newImages;
+    });
   };
 
   return (
     <Box>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" gutterBottom sx={{ 
-          mb: 1,
-          fontWeight: 700,
-          background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-        }}>
-          Convert PDF to Images
-        </Typography>
-        
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-          Extract pages from your PDF as high-quality image files.
-        </Typography>
-      </Box>
-      
-      {!file ? (
-        <Paper 
-          variant="outlined" 
-          sx={{ 
-            p: 5,
-            borderRadius: 3,
-            borderStyle: 'dashed',
-            borderWidth: 2,
-            borderColor: theme => alpha(theme.palette.primary.main, 0.2),
-            bgcolor: theme => alpha(theme.palette.primary.main, 0.03),
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
+      <PageHeader
+        title="PDF to Images"
+        description="Convert your PDF pages into high-quality PNG images. Perfect for extracting images or creating visual content from your PDFs."
+        icon={<ImageIcon sx={{ fontSize: 32 }} />}
+      />
+
+      <Paper
+        elevation={0}
+        sx={{
+          p: 3,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: theme => theme.palette.mode === 'dark'
+            ? 'rgba(31, 31, 31, 0.8)'
+            : 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        <Box
+          {...getRootProps()}
+          sx={{
+            border: '2px dashed',
+            borderColor: 'primary.main',
+            borderRadius: 2,
+            p: 4,
             textAlign: 'center',
-            transition: 'all 0.2s ease',
             cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            backgroundColor: theme => alpha(theme.palette.primary.main, 0.05),
             '&:hover': {
-              borderColor: theme => alpha(theme.palette.primary.main, 0.5),
-              bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+              backgroundColor: theme => alpha(theme.palette.primary.main, 0.08),
+              borderColor: 'primary.dark'
             }
           }}
-          component="label"
-          htmlFor="pdf-to-images-input"
         >
-          <input
-            accept=".pdf"
-            style={{ display: 'none' }}
-            id="pdf-to-images-input"
-            type="file"
-            onChange={handleFileChange}
-            disabled={isProcessing}
+          <input {...getInputProps()} />
+          <FileUploadIcon 
+            sx={{ 
+              fontSize: 48, 
+              color: 'primary.main',
+              mb: 2
+            }} 
           />
-          <CloudUploadIcon sx={{ 
-            fontSize: 60, 
-            color: 'primary.main', 
-            mb: 2, 
-            opacity: 0.7 
-          }} />
-          <Typography variant="h6" gutterBottom fontWeight={600}>
-            Select a PDF to Convert
+          <Typography variant="h6" gutterBottom sx={{ fontFamily: "'Montserrat', sans-serif" }}>
+            {file ? 'Drop a different PDF file' : 'Drop a PDF file here'}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400 }}>
-            Upload a PDF document to extract its pages as images
+          <Typography variant="body2" color="text.secondary">
+            or click to select file
           </Typography>
-          <Button
-            variant="contained"
-            component="span"
-            startIcon={<FileUploadIcon />}
-            sx={{
-              background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-              px: 3,
-              py: 1.5,
-            }}
-          >
-            Select PDF File
-          </Button>
-        </Paper>
-      ) : (
-        <Box>
-          <Paper 
-            variant="outlined" 
-            sx={{ 
-              p: 3, 
-              borderRadius: 3,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              mb: 3,
-              boxShadow: theme => isDarkMode 
-                ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
-                : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Box sx={{
-                width: 48,
-                height: 48,
-                borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: theme => alpha(theme.palette.primary.main, 0.1),
-                color: 'primary.main',
-                mr: 2
-              }}>
-                <DescriptionIcon sx={{ fontSize: 28 }} />
-              </Box>
-              <Box>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  {file.name}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {pageCount} pages
-                </Typography>
-              </Box>
-            </Box>
-            <Tooltip title="Remove file">
-              <IconButton 
-                onClick={handleRemoveFile}
-                disabled={isProcessing}
-                size="small"
-                sx={{
-                  color: 'error.main',
-                  opacity: 0.7,
-                  '&:hover': {
-                    opacity: 1,
-                  }
-                }}
-              >
-                <DeleteIcon />
-              </IconButton>
-            </Tooltip>
-          </Paper>
+        </Box>
 
-          <Paper 
-            variant="outlined" 
-            sx={{ 
-              p: 3, 
-              borderRadius: 3, 
-              mb: 3,
-              boxShadow: theme => isDarkMode 
-                ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
-                : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
-            }}
-          >
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 3 }}>
-              Conversion Settings
+        <AnimatePresence>
+          {file && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Box sx={{ mt: 4 }}>
+                <Stack spacing={3}>
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                      Selected File
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {file.name}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                      Image Quality
+                    </Typography>
+                    <Box sx={{ px: 2 }}>
+                      <Slider
+                        value={quality}
+                        onChange={handleQualityChange}
+                        min={30}
+                        max={100}
+                        valueLabelDisplay="auto"
+                        valueLabelFormat={value => `${value}%`}
+                      />
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" color="text.secondary">Smaller Size</Typography>
+                        <Typography variant="caption" color="text.secondary">Best Quality</Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                    {images.length > 0 && (
+                      <Button
+                        variant="outlined"
+                        onClick={downloadImages}
+                        startIcon={<DownloadIcon />}
+                      >
+                        Download All
+                      </Button>
+                    )}
+                    <Button
+                      variant="contained"
+                      onClick={convertToImages}
+                      disabled={processing}
+                      startIcon={<ImageIcon />}
+                      sx={{
+                        background: theme => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                        color: 'white',
+                        '&:hover': {
+                          background: theme => `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`
+                        }
+                      }}
+                    >
+                      {processing ? 'Converting...' : 'Convert to Images'}
+                    </Button>
+                  </Box>
+                </Stack>
+              </Box>
+
+              {processing && (
+                <Box sx={{ mt: 4 }}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 1
+                  }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Converting PDF to images...
+                    </Typography>
+                    <Typography variant="body2" color="primary" fontWeight={500}>
+                      {Math.round(progress)}%
+                    </Typography>
+                  </Box>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={progress} 
+                    sx={{ 
+                      height: 8, 
+                      borderRadius: 4,
+                    }}
+                  />
+                </Box>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </Paper>
+
+      {images.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+        >
+          <Box sx={{ mt: 4 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+              Generated Images
             </Typography>
-            
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth variant="outlined" size="small">
-                  <InputLabel id="image-format-label">Image Format</InputLabel>
-                  <Select
-                    labelId="image-format-label"
-                    value={format}
-                    onChange={(e) => setFormat(e.target.value as 'png' | 'jpeg')}
-                    label="Image Format"
-                    disabled={isProcessing}
+            <Grid container spacing={2}>
+              {images.map((image, index) => (
+                <Grid item xs={12} sm={6} md={4} key={image.pageNumber}>
+                  <Card 
+                    sx={{ 
+                      position: 'relative',
+                      '&:hover .image-actions': {
+                        opacity: 1
+                      }
+                    }}
                   >
-                    <MenuItem value="png">PNG (Lossless)</MenuItem>
-                    <MenuItem value="jpeg">JPEG (Smaller Size)</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth variant="outlined" size="small">
-                  <InputLabel id="dpi-label">Resolution (DPI)</InputLabel>
-                  <Select
-                    labelId="dpi-label"
-                    value={dpi}
-                    onChange={(e) => setDpi(Number(e.target.value))}
-                    label="Resolution (DPI)"
-                    disabled={isProcessing}
-                  >
-                    <MenuItem value={72}>72 DPI (Screen Resolution)</MenuItem>
-                    <MenuItem value={150}>150 DPI (Medium Quality)</MenuItem>
-                    <MenuItem value={300}>300 DPI (High Quality)</MenuItem>
-                    <MenuItem value={600}>600 DPI (Print Quality)</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
+                    <CardMedia
+                      component="img"
+                      image={image.url}
+                      alt={`Page ${image.pageNumber}`}
+                      sx={{ 
+                        aspectRatio: '1/1.4',
+                        objectFit: 'cover'
+                      }}
+                    />
+                    <CardActions 
+                      className="image-actions"
+                      sx={{ 
+                        position: 'absolute',
+                        top: 0,
+                        right: 0,
+                        opacity: 0,
+                        transition: 'opacity 0.2s',
+                        bgcolor: 'rgba(0, 0, 0, 0.6)',
+                        borderRadius: '0 0 0 8px'
+                      }}
+                    >
+                      <Tooltip title="View Full Size">
+                        <IconButton 
+                          size="small" 
+                          onClick={() => window.open(image.url, '_blank')}
+                          sx={{ color: 'white' }}
+                        >
+                          <ZoomInIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Remove">
+                        <IconButton 
+                          size="small" 
+                          onClick={() => removeImage(index)}
+                          sx={{ color: 'white' }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </CardActions>
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 8,
+                        left: 8,
+                        bgcolor: 'rgba(0, 0, 0, 0.6)',
+                        color: 'white',
+                        px: 1,
+                        py: 0.5,
+                        borderRadius: 1,
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      Page {image.pageNumber}
+                    </Box>
+                  </Card>
+                </Grid>
+              ))}
             </Grid>
-            
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="body2" color="text.secondary">
-                Output: All pages will be saved as individual {format.toUpperCase()} images in a ZIP file.
-              </Typography>
-            </Box>
-          </Paper>
-          
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={convertPDFToImages}
-            disabled={isProcessing}
-            startIcon={<ImageIcon />}
-            fullWidth
-            size="large"
-            sx={{
-              background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
-              py: 1.5,
-              fontWeight: 600,
-            }}
-          >
-            Convert to Images
-          </Button>
-        </Box>
-      )}
-
-      {isProcessing && (
-        <Box sx={{ width: '100%', mt: 4 }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 1
-          }}>
-            <Typography variant="body2" color="text.secondary">
-              Converting PDF to images...
-            </Typography>
-            <Typography variant="body2" color="primary" fontWeight={600}>
-              {Math.round(progress)}%
-            </Typography>
           </Box>
-          <LinearProgress 
-            variant="determinate" 
-            value={progress} 
-            sx={{ 
-              height: 8, 
-              borderRadius: 4,
-            }}
-          />
-        </Box>
+        </motion.div>
       )}
 
-      <Fade in={success}>
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
         <Alert 
-          icon={<CheckCircleIcon fontSize="inherit" />} 
-          severity="success"
-          sx={{ 
-            mt: 3,
-            borderRadius: 2,
-            boxShadow: theme => `0 4px 12px ${alpha(theme.palette.success.main, 0.2)}`,
-          }}
+          onClose={() => setError(null)} 
+          severity="error" 
+          sx={{ width: '100%' }}
+          icon={<ErrorOutlineIcon />}
         >
-          PDF successfully converted to images! Your download should start automatically.
+          {error}
         </Alert>
-      </Fade>
+      </Snackbar>
     </Box>
   );
 };
