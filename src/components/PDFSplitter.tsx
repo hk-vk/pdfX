@@ -4,40 +4,44 @@ import {
   Button, 
   Box, 
   Typography, 
-  TextField, 
   LinearProgress, 
-  Paper,
-  Alert,
+  Paper, 
+  Slider, 
+  FormControl, 
+  InputLabel, 
+  Select, 
+  MenuItem, 
+  IconButton, 
+  Tooltip, 
+  Alert, 
   Fade,
-  Chip,
+  Divider,
   Stack,
-  Radio,
-  RadioGroup,
-  FormControlLabel,
-  FormControl,
-  FormLabel,
-  Tooltip,
-  IconButton
+  Chip,
+  alpha,
+  useTheme,
+  SelectChangeEvent
 } from '@mui/material';
 import { saveAs } from 'file-saver';
-import JSZip from 'jszip';
-import ContentCutIcon from '@mui/icons-material/ContentCut';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import DescriptionIcon from '@mui/icons-material/Description';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCutIcon from '@mui/icons-material/ContentCut';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import InfoIcon from '@mui/icons-material/Info';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 
-type SplitMode = 'all' | 'ranges' | 'pages';
+type SplitMode = 'range' | 'single' | 'all';
 
 const PDFSplitter: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [pageRanges, setPageRanges] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [splitMode, setSplitMode] = useState<SplitMode>('range');
+  const [pageRange, setPageRange] = useState<[number, number]>([1, 2]);
   const [success, setSuccess] = useState(false);
   const [pageCount, setPageCount] = useState<number | null>(null);
-  const [splitMode, setSplitMode] = useState<SplitMode>('all');
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -48,23 +52,17 @@ const PDFSplitter: React.FC = () => {
       try {
         const fileBuffer = await selectedFile.arrayBuffer();
         const pdf = await PDFDocument.load(fileBuffer);
-        setPageCount(pdf.getPageCount());
+        const count = pdf.getPageCount();
+        setPageCount(count);
+        setPageRange([1, count > 1 ? 2 : 1]);
       } catch (error) {
         console.error('Error loading PDF:', error);
       }
     }
   };
 
-  const parsePageRanges = (input: string): number[][] => {
-    if (!input.trim()) return [];
-    return input.split(',').map(range => {
-      const [start, end] = range.trim().split('-').map(num => parseInt(num, 10));
-      return end ? [start - 1, end - 1] : [start - 1, start - 1];
-    });
-  };
-
   const splitPDF = async () => {
-    if (!file) return;
+    if (!file || !pageCount) return;
 
     setIsProcessing(true);
     setProgress(0);
@@ -72,51 +70,57 @@ const PDFSplitter: React.FC = () => {
 
     try {
       const fileBuffer = await file.arrayBuffer();
-      const pdf = await PDFDocument.load(fileBuffer);
-      const totalPages = pdf.getPageCount();
-      let ranges: number[][] = [];
+      const pdfDoc = await PDFDocument.load(fileBuffer);
       
       if (splitMode === 'all') {
-        // Split every page
-        ranges = Array.from({ length: totalPages }, (_, i) => [i, i]);
-      } else if (splitMode === 'pages') {
         // Split into individual pages
-        ranges = Array.from({ length: totalPages }, (_, i) => [i, i]);
-      } else {
-        // Split by custom ranges
-        ranges = parsePageRanges(pageRanges);
-        if (ranges.length === 0) {
-          throw new Error('Invalid page ranges');
+        let processedPages = 0;
+        
+        for (let i = 0; i < pageCount; i++) {
+          const newPdf = await PDFDocument.create();
+          const [copiedPage] = await newPdf.copyPages(pdfDoc, [i]);
+          newPdf.addPage(copiedPage);
+          
+          const pdfBytes = await newPdf.save();
+          const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+          saveAs(blob, `${file.name.replace('.pdf', '')}_page-${i + 1}.pdf`);
+          
+          processedPages++;
+          setProgress((processedPages / pageCount) * 100);
         }
-      }
-
-      const zip = new JSZip();
-      let processedRanges = 0;
-
-      for (const [start, end] of ranges) {
+      } else if (splitMode === 'single') {
+        // Extract a single page
+        const pageIndex = pageRange[0] - 1;
         const newPdf = await PDFDocument.create();
-        const pages = await newPdf.copyPages(pdf, Array.from(
-          { length: end - start + 1 },
-          (_, i) => start + i
-        ));
+        const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageIndex]);
+        newPdf.addPage(copiedPage);
         
-        pages.forEach(page => newPdf.addPage(page));
         const pdfBytes = await newPdf.save();
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        saveAs(blob, `${file.name.replace('.pdf', '')}_page-${pageRange[0]}.pdf`);
         
-        if (splitMode === 'all') {
-          // If splitting the entire document, just save as one file
-          return saveAs(new Blob([pdfBytes]), `${file.name.replace('.pdf', '')}_split.pdf`);
-        } else {
-          // Otherwise add to zip
-          zip.file(`${file.name.replace('.pdf', '')}_${start + 1}-${end + 1}.pdf`, pdfBytes);
-        }
+        setProgress(100);
+      } else if (splitMode === 'range') {
+        // Extract a range of pages
+        const startPage = pageRange[0] - 1;
+        const endPage = pageRange[1] - 1;
+        const newPdf = await PDFDocument.create();
         
-        processedRanges++;
-        setProgress((processedRanges / ranges.length) * 100);
+        const pageIndexes = Array.from(
+          { length: endPage - startPage + 1 }, 
+          (_, i) => startPage + i
+        );
+        
+        const copiedPages = await newPdf.copyPages(pdfDoc, pageIndexes);
+        copiedPages.forEach(page => newPdf.addPage(page));
+        
+        const pdfBytes = await newPdf.save();
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        saveAs(blob, `${file.name.replace('.pdf', '')}_pages-${pageRange[0]}-${pageRange[1]}.pdf`);
+        
+        setProgress(100);
       }
-
-      const zipContent = await zip.generateAsync({ type: 'blob' });
-      saveAs(zipContent, `${file.name.replace('.pdf', '')}_split.zip`);
+      
       setSuccess(true);
       
       // Reset success message after 5 seconds
@@ -136,78 +140,127 @@ const PDFSplitter: React.FC = () => {
     setPageCount(null);
   };
 
+  const handleSplitModeChange = (event: SelectChangeEvent) => {
+    setSplitMode(event.target.value as SplitMode);
+  };
+
+  const handlePageRangeChange = (event: Event, newValue: number | number[]) => {
+    setPageRange(newValue as [number, number]);
+  };
+
   return (
     <Box>
-      <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-        Split PDF Document
-      </Typography>
-      
       <Box sx={{ mb: 4 }}>
-        <Typography variant="body1" gutterBottom color="text.secondary">
-          Split a PDF document into multiple files based on page ranges or extract individual pages.
+        <Typography variant="h5" gutterBottom sx={{ 
+          mb: 1,
+          fontWeight: 700,
+          background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
+          backgroundClip: 'text',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+        }}>
+          Split PDF Document
+        </Typography>
+        
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          Extract specific pages or split your PDF into multiple documents.
         </Typography>
       </Box>
       
-      <input
-        accept=".pdf"
-        style={{ display: 'none' }}
-        id="pdf-split-input"
-        type="file"
-        onChange={handleFileChange}
-        disabled={isProcessing}
-      />
-      
       {!file ? (
-        <Box sx={{ 
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 5,
-          border: '2px dashed',
-          borderColor: 'divider',
-          borderRadius: 2,
-          bgcolor: 'action.hover',
-          textAlign: 'center'
-        }}>
-          <DescriptionIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2, opacity: 0.7 }} />
-          <Typography variant="h6" gutterBottom>
+        <Paper 
+          variant="outlined" 
+          sx={{ 
+            p: 5,
+            borderRadius: 3,
+            borderStyle: 'dashed',
+            borderWidth: 2,
+            borderColor: theme => alpha(theme.palette.primary.main, 0.2),
+            bgcolor: theme => alpha(theme.palette.primary.main, 0.03),
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            transition: 'all 0.2s ease',
+            cursor: 'pointer',
+            '&:hover': {
+              borderColor: theme => alpha(theme.palette.primary.main, 0.5),
+              bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+            }
+          }}
+          component="label"
+          htmlFor="pdf-split-input"
+        >
+          <input
+            accept=".pdf"
+            style={{ display: 'none' }}
+            id="pdf-split-input"
+            type="file"
+            onChange={handleFileChange}
+            disabled={isProcessing}
+          />
+          <CloudUploadIcon sx={{ 
+            fontSize: 60, 
+            color: 'primary.main', 
+            mb: 2, 
+            opacity: 0.7 
+          }} />
+          <Typography variant="h6" gutterBottom fontWeight={600}>
             Select a PDF to Split
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Upload a PDF document to get started
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400 }}>
+            Upload a PDF document to extract pages or split into multiple files
           </Typography>
-          <label htmlFor="pdf-split-input">
-            <Button
-              variant="contained"
-              component="span"
-              startIcon={<FileUploadIcon />}
-            >
-              Select PDF File
-            </Button>
-          </label>
-        </Box>
+          <Button
+            variant="contained"
+            component="span"
+            startIcon={<FileUploadIcon />}
+            sx={{
+              background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
+              px: 3,
+              py: 1.5,
+            }}
+          >
+            Select PDF File
+          </Button>
+        </Paper>
       ) : (
         <Box>
           <Paper 
             variant="outlined" 
             sx={{ 
               p: 3, 
-              borderRadius: 2,
+              borderRadius: 3,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              mb: 3
+              mb: 3,
+              boxShadow: theme => isDarkMode 
+                ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
+                : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <DescriptionIcon color="primary" sx={{ mr: 2, fontSize: 40 }} />
+              <Box sx={{
+                width: 48,
+                height: 48,
+                borderRadius: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: theme => alpha(theme.palette.primary.main, 0.1),
+                color: 'primary.main',
+                mr: 2
+              }}>
+                <DescriptionIcon sx={{ fontSize: 28 }} />
+              </Box>
               <Box>
-                <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                   {file.name}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB • {pageCount} pages
+                  {pageCount} pages
                 </Typography>
               </Box>
             </Box>
@@ -216,104 +269,166 @@ const PDFSplitter: React.FC = () => {
                 onClick={handleRemoveFile}
                 disabled={isProcessing}
                 size="small"
+                sx={{
+                  color: 'error.main',
+                  opacity: 0.7,
+                  '&:hover': {
+                    opacity: 1,
+                  }
+                }}
               >
                 <DeleteIcon />
               </IconButton>
             </Tooltip>
           </Paper>
 
-          <Paper variant="outlined" sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-            <FormControl component="fieldset" sx={{ width: '100%' }}>
-              <FormLabel component="legend" sx={{ mb: 2, fontWeight: 500 }}>
-                Split Options
-              </FormLabel>
-              <RadioGroup
+          <Paper 
+            variant="outlined" 
+            sx={{ 
+              p: 3, 
+              borderRadius: 3, 
+              mb: 3,
+              boxShadow: theme => isDarkMode 
+                ? `0 4px 20px ${alpha(theme.palette.common.black, 0.2)}` 
+                : `0 4px 20px ${alpha(theme.palette.common.black, 0.05)}`,
+            }}
+          >
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 3 }}>
+              Split Options
+            </Typography>
+            
+            <FormControl fullWidth variant="outlined" size="small" sx={{ mb: 3 }}>
+              <InputLabel id="split-mode-label">Split Mode</InputLabel>
+              <Select
+                labelId="split-mode-label"
                 value={splitMode}
-                onChange={(e) => setSplitMode(e.target.value as SplitMode)}
+                onChange={handleSplitModeChange}
+                label="Split Mode"
+                disabled={isProcessing}
               >
-                <FormControlLabel 
-                  value="all" 
-                  control={<Radio />} 
-                  label="Extract entire document (no splitting)" 
-                  disabled={isProcessing}
-                />
-                <FormControlLabel 
-                  value="pages" 
-                  control={<Radio />} 
-                  label="Split into individual pages" 
-                  disabled={isProcessing}
-                />
-                <FormControlLabel 
-                  value="ranges" 
-                  control={<Radio />} 
-                  label="Split by page ranges" 
-                  disabled={isProcessing}
-                />
-              </RadioGroup>
-              
-              {splitMode === 'ranges' && (
-                <Box sx={{ mt: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      Page Ranges
-                    </Typography>
-                    <Tooltip title="Format: 1-3, 5, 7-9 (page numbers start at 1)">
-                      <IconButton size="small" sx={{ ml: 1 }}>
-                        <InfoIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                  <TextField
-                    fullWidth
-                    placeholder="e.g., 1-3, 5, 7-9"
-                    value={pageRanges}
-                    onChange={(e) => setPageRanges(e.target.value)}
-                    disabled={isProcessing}
-                    size="small"
-                    sx={{ mb: 2 }}
-                  />
-                  
-                  {pageCount && pageRanges && (
-                    <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', gap: 1 }}>
-                      {parsePageRanges(pageRanges).map(([start, end], index) => (
-                        <Chip 
-                          key={index}
-                          label={start === end ? `Page ${start + 1}` : `Pages ${start + 1}-${end + 1}`}
-                          color="primary"
-                          variant="outlined"
-                          size="small"
-                        />
-                      ))}
-                    </Stack>
-                  )}
-                </Box>
-              )}
+                <MenuItem value="range">Extract Page Range</MenuItem>
+                <MenuItem value="single">Extract Single Page</MenuItem>
+                <MenuItem value="all">Split into Individual Pages</MenuItem>
+              </Select>
             </FormControl>
+            
+            {(splitMode === 'range' || splitMode === 'single') && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+                  {splitMode === 'range' ? 'Page Range' : 'Page Number'}
+                </Typography>
+                
+                <Box sx={{ px: 1 }}>
+                  <Slider
+                    value={splitMode === 'range' ? pageRange : [pageRange[0], pageRange[0]]}
+                    onChange={handlePageRangeChange}
+                    min={1}
+                    max={pageCount || 1}
+                    step={1}
+                    marks
+                    valueLabelDisplay="auto"
+                    disabled={isProcessing || !pageCount}
+                    disableSwap
+                    sx={{
+                      '& .MuiSlider-thumb': {
+                        width: 16,
+                        height: 16,
+                      },
+                      '& .MuiSlider-track': {
+                        background: 'linear-gradient(90deg, #4361ee, #3a0ca3)',
+                      }
+                    }}
+                  />
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="caption" color="text.secondary">Page 1</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Page {pageCount || 1}
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+            
+            <Divider sx={{ my: 2 }} />
+            
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" sx={{ mb: 2, fontWeight: 500 }}>
+                Output Summary
+              </Typography>
+              
+              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                {splitMode === 'all' && (
+                  <Chip 
+                    label={`${pageCount} individual PDF files`} 
+                    size="small" 
+                    color="primary" 
+                    variant="outlined" 
+                  />
+                )}
+                
+                {splitMode === 'single' && (
+                  <Chip 
+                    label={`Extract page ${pageRange[0]}`} 
+                    size="small" 
+                    color="primary" 
+                    variant="outlined" 
+                  />
+                )}
+                
+                {splitMode === 'range' && (
+                  <Chip 
+                    label={`Pages ${pageRange[0]} to ${pageRange[1]}`} 
+                    size="small" 
+                    color="primary" 
+                    variant="outlined" 
+                  />
+                )}
+              </Stack>
+            </Box>
           </Paper>
           
           <Button
             variant="contained"
             color="primary"
             onClick={splitPDF}
-            disabled={isProcessing || (splitMode === 'ranges' && !pageRanges)}
+            disabled={isProcessing}
             startIcon={<ContentCutIcon />}
             fullWidth
             size="large"
+            sx={{
+              background: 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
+              py: 1.5,
+              fontWeight: 600,
+            }}
           >
-            {splitMode === 'all' ? 'Extract Document' : 'Split PDF'}
+            Split PDF
           </Button>
         </Box>
       )}
 
       {isProcessing && (
         <Box sx={{ width: '100%', mt: 4 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Processing PDF... ({Math.round(progress)}%)
-          </Typography>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 1
+          }}>
+            <Typography variant="body2" color="text.secondary">
+              Splitting PDF...
+            </Typography>
+            <Typography variant="body2" color="primary" fontWeight={600}>
+              {Math.round(progress)}%
+            </Typography>
+          </Box>
           <LinearProgress 
             variant="determinate" 
             value={progress} 
-            sx={{ height: 8, borderRadius: 4 }}
+            sx={{ 
+              height: 8, 
+              borderRadius: 4,
+            }}
           />
         </Box>
       )}
@@ -322,7 +437,11 @@ const PDFSplitter: React.FC = () => {
         <Alert 
           icon={<CheckCircleIcon fontSize="inherit" />} 
           severity="success"
-          sx={{ mt: 3 }}
+          sx={{ 
+            mt: 3,
+            borderRadius: 2,
+            boxShadow: theme => `0 4px 12px ${alpha(theme.palette.success.main, 0.2)}`,
+          }}
         >
           PDF successfully split! Your download should start automatically.
         </Alert>
